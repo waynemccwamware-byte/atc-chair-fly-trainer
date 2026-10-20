@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>ATC Chair-Fly Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#10141a;
+    --bg-panel:#1b222c;
+    --bezel:#2a323f;
+    --bezel-hi:#3a4454;
+    --amber:#f5a623;
+    --amber-dim:#7a5a1e;
+    --amber-glow:rgba(245,166,35,0.35);
+    --text-primary:#e7e4dc;
+    --text-muted:#8b93a1;
+    --teal:#3fa7a0;
+    --focus:#f5a623;
+    /* safe-area padding (App-Conventions §3b) */
+    padding-top:env(safe-area-inset-top, 0px);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;}
+  html,body{min-height:100%;}
+  html{
+    background:var(--bg-deep);
+    overscroll-behavior:none;
+    scroll-padding-top:env(safe-area-inset-top, 0px);
+    color-scheme:dark;
+  }
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    background:radial-gradient(ellipse at 50% 0%, #171d26 0%, var(--bg-deep) 60%);
+    font-family:'IBM Plex Sans', sans-serif;
+    color:var(--text-primary);
+    padding:24px;
+    overscroll-behavior:none;
+  }
+  .layout{
+    width:100%;
+    max-width:724px;
+    margin:0 auto;
+  }
+  .duo{
+    display:flex;
+    gap:20px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .avionics-col{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    width:284px;
+    flex:0 0 284px;
+  }
+  .avio-card{
+    background:var(--bg-panel);
+    border:1px solid var(--bezel);
+    border-radius:6px;
+    padding:14px 14px 12px;
+    box-shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 14px 28px rgba(0,0,0,0.3);
+  }
+  .avio-card h3{
+    margin:0 0 10px;
+    font-size:11px;
+    letter-spacing:0.05em;
+    color:var(--text-muted);
+    font-weight:500;
+  }
+  .avio-card svg{
+    overflow:visible;
+    display:block;
+    width:100%;
+    height:auto;
+  }
+  .avio-card .cap{
+    margin-top:9px;
+    font-size:11px;
+    color:var(--text-muted);
+    text-align:center;
+  }
+  .knob{cursor:pointer;}
+  .avio-card svg{touch-action:manipulation;}
+  .knob circle{transition:stroke-width 0.12s ease;}
+  .knob:hover circle{stroke-width:3;}
+  .knob.success circle{stroke:#5fd97a;}
+  .knob.success text{fill:#5fd97a;}
+  .knob.fail circle{stroke:#e5534b;}
+  .knob.fail text{fill:#e5534b;}
+  .knob.neutral circle{stroke:#3fa7a0;}
+  .knob.neutral text{fill:#3fa7a0;}
+  .label-green{color:#5fd97a;}
+  .label-red{color:#e5534b;}
+  .field .label-green{color:#5fd97a;}
+  .field .label-red{color:#e5534b;}
+  /* title row (App-Conventions §4) */
+  .title-row{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom:14px; padding:0 4px;
+  }
+  .title-row h1{ font-size:22px; font-weight:600; margin:0; letter-spacing:0.01em; }
+  .title-row .ver{ font-size:11px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; }
+
+  /* ---- v2: pseudo-PFD ---- */
+  :root{ --cyan:#35d7e8; --pfd-green:#4fe36b; }
+  .pfd-wrap{
+    margin:0;
+    background:#05070a;
+    border:1px solid #000;
+    border-radius:6px;
+    padding:4px;
+    box-shadow:0 0 0 3px var(--bezel), 0 0 0 4px var(--bezel-hi);
+  }
+  #pfd{
+    display:block; width:100%; height:auto;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    border-radius:3px;
+  }
+  #pfd.armed{ touch-action:none; cursor:grab; }
+  #pfd.armed:active{ cursor:grabbing; }
+  #pfd text{ font-family:'IBM Plex Mono', monospace; }
+  #pfd .hl{ display:none; fill:none; stroke:var(--cyan); stroke-width:2.2; animation:hlpulse 1s ease-in-out infinite; }
+  #pfd.mode-hdg .hl-hdg, #pfd.mode-alt .hl-alt{ display:inline; }
+  #pfd.flash-ok .hl.show, #pfd.flash-bad .hl.show{ display:inline; animation:none; }
+  #pfd.flash-ok .hl.show{ stroke:#5fd97a; stroke-width:3; }
+  #pfd.flash-bad .hl.show{ stroke:#e5534b; stroke-width:3; }
+  #pfd #comOverlay{ display:none; }
+  #pfd .com-ring{ animation:hlpulse 1s ease-in-out infinite; }
+  #pfd .kp-key{ cursor:pointer; }
+  #pfd .kp-key rect{ fill:#1b222c; stroke:#3a4454; stroke-width:1; }
+  #pfd .kp-key text{ fill:#e7e4dc; font-weight:500; pointer-events:none; }
+  #pfd .kp-ent rect{ stroke:var(--cyan); }
+  #pfd .kp-key.pressed rect{ fill:#1f4a52; stroke:var(--cyan); }
+  #pfd #comBig.entry{ fill:#e7e4dc; }
+  #pfd.kp-held #comBig{ fill:#5fd97a; }
+  #pfd.kp-held #comOverlay{ display:inline; }
+  #pfd.mode-com #comOverlay, #pfd.com-result #comOverlay{ display:inline; }
+  #pfd.flash-ok #comBig{ fill:#5fd97a; }
+  #pfd.flash-bad #comBig{ fill:#e5534b; }
+  @keyframes hlpulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .pfd-hint{
+    min-height:17px;
+    margin:7px 0 10px;
+    text-align:center;
+    font-size:12px;
+    color:var(--text-muted);
+  }
+  .pfd-hint.armed{ color:var(--cyan); }
+  .panel.settings-card{ margin-top:16px; flex:none; width:100%; padding:8px 12px; }
+  .settings-card input:disabled{ opacity:0.4; }
+  .settings-card .settings{ margin-top:0; padding-top:0; border-top:none; gap:6px 18px; justify-content:flex-start; }
+  .settings-card .field{ flex-direction:row; align-items:center; gap:6px; }
+  .settings-card select, .settings-card input[type="number"]{ padding:3px 5px; font-size:12px; }
+  .settings-card select{ max-width:170px; }
+  .settings-card input[type="number"]{ width:50px; }
+  .settings-card input[type="range"]{ width:90px; }
+  .settings-card .toggle{ font-size:12px; }
+  /* v3.12 Voice & radio submenu (same controls as Clearance Delivery Trainer) */
+  details.vset{ margin-top:8px; border-top:1px solid var(--bezel); padding-top:7px; }
+  details.vset summary{ cursor:pointer; font-size:12.5px; color:var(--text-muted); }
+  details.vset[open] summary{ color:var(--amber); margin-bottom:8px; }
+  .vset .vrow{ display:flex; align-items:center; gap:8px; margin:4px 0; }
+  .vset .vrow > span:first-child, .vset .vslider > span:first-child{ width:66px; flex:none; font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+  .settings-card .vset select{ max-width:none; width:100%; min-width:0; flex:1 1 auto; }
+  .vset .vslider{ display:grid; grid-template-columns:66px minmax(0,1fr) 50px; align-items:center; gap:8px; margin:4px 0; }
+  .settings-card .vset input[type="range"]{ width:100%; }
+  .vset .vslider output{ font:500 12px 'IBM Plex Mono', monospace; color:var(--amber); text-align:right; }
+  .vset .vpresets{ display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 4px 74px; }
+  .vset .vbtn{ background:var(--bg-deep); border:1px solid var(--bezel-hi); color:var(--text-primary); font:500 12px 'IBM Plex Sans', sans-serif; padding:5px 9px; border-radius:3px; cursor:pointer; }
+  .vset .vbtn:hover{ border-color:var(--amber); color:var(--amber); }
+  .vset .vbtn.on{ border-color:var(--amber); color:var(--amber); }
+  .vset .vbtn:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+  .vset .toggle{ margin-top:4px; }
+  .vset .vhint{ font-size:11px; color:var(--text-muted); line-height:1.4; margin-top:6px; }
+  @media (max-width:480px){ .vset .vpresets{ margin-left:0; } }
+  /* twist arc around the armed knob */
+  .knob .knob-hit{ stroke:none !important; }
+  .knob-arc{ display:none; fill:none; stroke:var(--cyan); stroke-width:2.4; stroke-linecap:round; animation:hlpulse 1s ease-in-out infinite; }
+  .knob-arc-head{ display:none; fill:var(--cyan); animation:hlpulse 1s ease-in-out infinite; }
+  .knob.armed .knob-arc, .knob.armed .knob-arc-head{ display:inline; }
+  .avio-card svg.armed{ touch-action:none; }
+  .callsign-row{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px 14px;
+    margin-bottom:14px;
+    padding:0 4px;
+  }
+  .callsign-row label{
+    font-size:12px;
+    letter-spacing:0.04em;
+    color:var(--text-muted);
+    margin-right:8px;
+  }
+  .callsign-row input{
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--bezel-hi);
+    color:var(--teal);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:16px;
+    font-weight:500;
+    letter-spacing:0.05em;
+    padding:2px 2px 4px;
+    width:110px;
+    outline:none;
+  }
+  .callsign-row input:focus{border-bottom-color:var(--amber);}
+  .lsrb-graphic{
+    display:block;
+    width:100%;
+    max-width:357px;
+    height:auto;
+    margin:2px 4px 10px;
+  }
+  .purpose-line{
+    font-size:12.5px;
+    color:var(--teal);
+    margin:0 4px 8px;
+  }
+  .purpose-label{
+    color:var(--text-primary);
+  }
+  .purpose-list{
+    margin:0 4px 14px;
+    padding-left:18px;
+    font-size:11.5px;
+    line-height:1.5;
+    color:var(--teal);
+  }
+  .purpose-list li{margin-bottom:3px;}
+  .purpose-list li:last-child{margin-bottom:0;}
+  .purpose-list strong{color:var(--text-muted); font-weight:600;}
+  .stats{
+    display:flex;
+    gap:18px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--text-muted);
+    white-space:nowrap;
+  }
+
+  .panel{
+    background:var(--bg-panel);
+    border:1px solid var(--bezel);
+    border-radius:6px;
+    box-shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 20px 40px rgba(0,0,0,0.35);
+    padding:12px;
+    flex:0 0 420px;
+    width:420px;
+    min-width:0;
+  }
+
+  .readout{
+    background:#0b0e12;
+    border:1px solid var(--bezel);
+    border-radius:4px;
+    padding:7px 10px;
+    min-height:40px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+  .readout p{
+    margin:0;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    line-height:1.4;
+    color:var(--amber);
+    text-shadow:0 0 14px var(--amber-glow);
+  }
+  .readout p.idle{
+    color:var(--text-muted);
+    text-shadow:none;
+    font-size:11px;
+  }
+  .readout p.masked{
+    color:var(--text-muted);
+    text-shadow:none;
+    letter-spacing:0.08em;
+  }
+
+  .again-btn{
+    display:block;
+    width:100%;
+    margin-top:8px;
+    padding:7px;
+    background:var(--amber);
+    color:#1a1305;
+    border:none;
+    border-radius:4px;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:0.01em;
+    cursor:pointer;
+    transition:transform 0.05s ease, background 0.15s ease;
+  }
+  .again-btn:hover{background:#ffb43d;}
+  .action-row{ display:flex; gap:8px; margin-top:8px; }
+  .action-row .again-btn{ margin-top:0; flex:1 1 auto; }
+  .ptt-btn{
+    flex:0 0 32%;
+    border:1px solid #6b2a26; border-radius:4px;
+    background:#2a1716; color:#f08a83;
+    font:600 13px 'IBM Plex Sans', sans-serif; letter-spacing:0.04em;
+    cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  .ptt-btn[hidden]{ display:none; }
+  .ptt-btn.tx{ background:#c0392b; border-color:#e5534b; color:#fff; }
+  .ptt-btn:focus-visible{ outline:2px solid var(--focus); outline-offset:3px; }
+  .rb-result{ margin-top:6px; text-align:center; font-size:11.5px; line-height:1.35; }
+  .rb-result:empty{ display:none; }
+  .rb-result.ok{ color:#5fd97a; }
+  .rb-result.bad{ color:#f08a83; }
+  .rb-result.info{ color:var(--text-muted); }
+  .again-btn:active{transform:scale(0.99);}
+  .again-btn:focus-visible{outline:2px solid var(--focus); outline-offset:3px;}
+  .hint{
+    text-align:center;
+    font-size:12px;
+    color:var(--text-muted);
+    margin-top:9px;
+  }
+
+  .settings{
+    margin-top:17px;
+    padding-top:14px;
+    border-top:1px solid var(--bezel);
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px 19px;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .field{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+  }
+  .field span{
+    font-size:11px;
+    color:var(--text-muted);
+    letter-spacing:0.03em;
+  }
+  select, input[type="number"], .rate-value{
+    background:var(--bg-deep);
+    border:1px solid var(--bezel-hi);
+    color:var(--text-primary);
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:13px;
+    padding:6px 8px;
+    border-radius:3px;
+    max-width:190px;
+  }
+  input[type="number"]{width:64px;}
+  input[type="range"]{
+    accent-color:var(--amber);
+    width:120px;
+  }
+  .toggle{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-size:13px;
+    color:var(--text-muted);
+    cursor:pointer;
+    user-select:none;
+  }
+  .toggle input{accent-color:var(--amber);}
+
+  .page-footer{
+    width:100%;
+    max-width:800px;
+    margin-top:22px;
+    padding-top:16px;
+    border-top:1px solid var(--bezel);
+    text-align:center;
+  }
+  .footer-link{
+    text-align:center;
+  }
+  .footer-link a{
+    font-size:12px;
+    color:var(--text-muted);
+    text-decoration:none;
+    border-bottom:1px solid var(--bezel-hi);
+    padding-bottom:1px;
+  }
+  .footer-link a:hover{color:var(--amber); border-bottom-color:var(--amber);}
+  .back-link{ margin-bottom:10px; }
+  .back-link a{
+    display:inline-block;
+    background:var(--bezel);
+    color:var(--amber);
+    text-decoration:none;
+    border:1px solid var(--bezel-hi);
+    border-radius:5px;
+    padding:6px 14px;
+    font-size:12px;
+  }
+  .back-link a:hover{ background:var(--bezel-hi); color:var(--amber); }
+  .credit-line{
+    margin-top:10px;
+    text-align:center;
+    font-size:11.5px;
+    color:var(--text-muted);
+  }
+  .credit-line a{
+    color:var(--text-muted);
+    text-decoration:none;
+    border-bottom:1px solid var(--bezel-hi);
+    padding-bottom:1px;
+  }
+  .credit-line a:hover{color:var(--amber); border-bottom-color:var(--amber);}
+  .hit-counter{
+    margin-top:8px;
+    text-align:center;
+    font-size:11px;
+    color:var(--text-muted);
+  }
+  .share-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    margin-top:14px;
+    background:transparent;
+    border:1px solid var(--bezel-hi);
+    border-radius:20px;
+    padding:8px 16px;
+    color:var(--text-muted);
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:12.5px;
+    cursor:pointer;
+    transition:color 0.15s ease, border-color 0.15s ease;
+  }
+  .share-btn:hover{color:var(--amber); border-color:var(--amber);}
+  .share-icon{width:15px; height:15px; flex-shrink:0;}
+
+  @media (max-width:760px){
+    .duo{flex-direction:column; align-items:center;}
+    .avionics-col{width:100%; max-width:none; flex:none; flex-direction:row; gap:10px;}
+    .avionics-col .avio-card{flex:1 1 0; min-width:0;}
+    .panel{flex:none; width:100%; min-width:0;}
+  }
+  @media (max-width:480px){
+    body{padding:12px;}
+    .layout{gap:12px;}
+    .callsign-row{margin-bottom:10px;}
+    .purpose-line{font-size:11px; margin-bottom:6px;}
+    .purpose-list{font-size:10px; padding-left:15px; margin-bottom:10px;}
+    .callsign-row input{font-size:14px; width:90px;}
+    .stats{font-size:10.5px; gap:10px;}
+
+    .panel{padding:9px;}
+    .readout{padding:6px 8px; min-height:38px;}
+    .readout p{font-size:11.5px; line-height:1.35;}
+    .readout p.idle{font-size:11px;}
+
+    .again-btn{padding:7px; font-size:13px; margin-top:8px;}
+    .hint{font-size:10.5px; margin-top:7px;}
+
+    .settings{margin-top:12px; padding-top:10px; gap:8px 14px;}
+    .settings-card .settings{gap:6px 12px;}
+    .field span{font-size:10px;}
+    select, input[type="number"], .rate-value{font-size:12px; padding:5px 6px;}
+    input[type="range"]{width:100px;}
+
+    .avionics-col{gap:8px;}
+    .avio-card .cap{display:none;}
+    .avio-card{padding:8px 8px 6px;}
+    .avio-card h3{margin-bottom:6px; font-size:10px;}
+    .avio-card .cap{margin-top:6px; font-size:10px;}
+    .title-row h1{font-size:19px;}
+    .pfd-wrap{padding:2px;}
+    .pfd-hint{font-size:10.5px; margin-top:6px;}
+
+    .page-footer{margin-top:14px; padding-top:10px;}
+    .footer-link a{font-size:11px;}
+    .credit-line{font-size:10.5px;}
+  }
+
+  /* phone in landscape: height is the limit — compact PFD box, knobs beside it */
+  @media (orientation:landscape) and (max-height:520px){
+    body{padding:6px 16px;}
+    .layout{max-width:none;}
+    .duo{flex-direction:row; flex-wrap:nowrap; align-items:flex-start; justify-content:center; gap:14px;}
+    .panel{flex:0 0 240px; width:240px; padding:6px;}
+    .pfd-wrap{padding:2px;}
+    .pfd-hint{display:none;}
+    .readout{margin-top:6px; min-height:30px; padding:4px 6px;}
+    .action-row{margin-top:6px;}
+    .readout p{font-size:11px;}
+    .again-btn{margin-top:6px; padding:6px; font-size:12.5px;}
+    .hint{display:none;}
+    .avionics-col{flex:0 1 280px; width:auto; max-width:280px; flex-direction:column; gap:8px;}
+    .avionics-col .avio-card{flex:none;}
+    .avio-card{padding:8px 10px 8px;}
+    .avio-card h3{display:none;}
+    .avio-card .cap{display:none;}
+    .callsign-row{margin-bottom:8px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+    <div class="title-row">
+      <h1>ATC Chair-Fly Trainer</h1>
+      <span class="ver mono">v3.12</span>
+    </div>
+
+    <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
+      <rect x="4"   y="6" width="76" height="32" rx="5" fill="var(--bezel)" stroke="var(--bezel-hi)"/>
+      <text x="42"  y="27" font-family="sans-serif" font-weight="600" font-size="13" fill="var(--text-muted)" text-anchor="middle">Listen</text>
+      <rect x="88"  y="6" width="76" height="32" rx="5" fill="var(--bezel)" stroke="var(--bezel-hi)"/>
+      <text x="126" y="27" font-family="sans-serif" font-weight="600" font-size="13" fill="var(--text-muted)" text-anchor="middle">Write</text>
+      <rect x="172" y="6" width="88" height="32" rx="5" fill="var(--bezel)" stroke="var(--bezel-hi)"/>
+      <text x="216" y="27" font-family="sans-serif" font-weight="600" font-size="13" fill="var(--text-muted)" text-anchor="middle">Read Back</text>
+      <rect x="268" y="6" width="68" height="32" rx="5" fill="var(--bezel)" stroke="var(--bezel-hi)"/>
+      <text x="302" y="27" font-family="sans-serif" font-weight="600" font-size="13" fill="var(--text-muted)" text-anchor="middle">Set</text>
+
+      <rect x="4"   y="60" width="88" height="34" rx="5" fill="var(--teal)"/>
+      <text x="48"  y="82" font-family="sans-serif" font-weight="700" font-size="13" fill="#0c1614" text-anchor="middle">Listen</text>
+      <text x="100" y="82" font-family="sans-serif" font-size="15" fill="var(--text-muted)" text-anchor="middle">&rarr;</text>
+      <rect x="116" y="60" width="88" height="34" rx="5" fill="var(--amber)"/>
+      <text x="160" y="82" font-family="sans-serif" font-weight="700" font-size="13" fill="#241a05" text-anchor="middle">Set</text>
+      <text x="212" y="82" font-family="sans-serif" font-size="15" fill="var(--text-muted)" text-anchor="middle">&rarr;</text>
+      <rect x="228" y="60" width="108" height="34" rx="5" fill="var(--bezel-hi)" stroke="var(--amber)" stroke-width="1.5"/>
+      <text x="282" y="82" font-family="sans-serif" font-weight="700" font-size="13" fill="var(--amber)" text-anchor="middle">Read Back</text>
+    </svg>
+
+    <div class="purpose-line"><span class="purpose-label">Purpose of this app:</span>&nbsp; Develop the habit/instinct to Listen and Set… then Read Back.</div>
+    <ul class="purpose-list">
+      <li><strong>LISTEN:</strong> you hear your call sign… and a word: turn, or climb, or contact… so</li>
+      <li><strong>SET:</strong> your right hand needs to be on the move to the correct knob in the panel, ready to dial in the instruction (tap the knob, then dial it in with the knob or on the PFD), then</li>
+      <li><strong>READ BACK:</strong> what you Set</li>
+    </ul>
+
+    <div class="callsign-row">
+      <div>
+        <label for="callsign">CALLSIGN</label>
+        <input id="callsign" type="text" value="N123AB" maxlength="8" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="stats">
+        <span id="count">INSTRUCTIONS 0</span>
+        <span id="correctCount">KNOB ON-TIME 0</span>
+        <span id="setCount">SET CORRECT 0</span>
+      </div>
+    </div>
+
+    <div class="duo">
+      <div class="panel">
+        <div class="pfd-wrap">
+          <svg id="pfd" viewBox="0 0 400 330" role="img" aria-label="Stylized primary flight display: HSI with heading bug, altitude tape with selected altitude, COM1 standby frequency">
+            <defs>
+              <clipPath id="attClip"><rect x="0" y="26" width="400" height="304"/></clipPath>
+              <clipPath id="altClip"><rect x="326" y="58" width="62" height="192"/></clipPath>
+              <clipPath id="asClip"><rect x="14" y="58" width="48" height="192"/></clipPath>
+              <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#123a6e"/><stop offset="1" stop-color="#3d7fc4"/>
+              </linearGradient>
+              <linearGradient id="gndGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7d5226"/><stop offset="1" stop-color="#4a2f14"/>
+              </linearGradient>
+            </defs>
+
+            <!-- attitude (decorative; banks and pitches with the simulated autopilot) -->
+            <g clip-path="url(#attClip)">
+              <g id="horizon">
+                <rect x="-400" y="-670" width="1200" height="800" fill="url(#skyGrad)"/>
+                <rect x="-400" y="130" width="1200" height="800" fill="url(#gndGrad)"/>
+                <line x1="-400" y1="130" x2="800" y2="130" stroke="#fff" stroke-width="1.5"/>
+                <g stroke="#fff" stroke-width="1.2" opacity="0.85">
+                  <line x1="186" y1="110" x2="206" y2="110"/>
+                  <line x1="176" y1="90" x2="216" y2="90"/>
+                  <line x1="186" y1="150" x2="206" y2="150"/>
+                </g>
+                <g fill="#fff" font-size="8" opacity="0.85">
+                  <text x="160" y="93">10</text><text x="222" y="93">10</text>
+                </g>
+              </g>
+            </g>
+            <g id="rollScale" stroke="#fff" stroke-width="1.5" opacity="0.9"></g>
+            <polygon id="rollPtr" points="196,45 191,53 201,53" fill="#fff"/>
+            <g stroke="#ffd23f" stroke-width="4" fill="none" stroke-linejoin="round">
+              <polyline points="138,130 172,130 180,138"/>
+              <polyline points="254,130 220,130 212,138"/>
+            </g>
+            <rect x="193" y="127" width="6" height="6" fill="#ffd23f"/>
+
+            <!-- airspeed tape (static, decorative) -->
+            <rect x="14" y="58" width="48" height="192" fill="rgba(0,0,0,0.45)"/>
+            <g clip-path="url(#asClip)" id="asTicks"></g>
+            <polygon points="68,154 60,144 14,144 14,164 60,164" fill="#000" stroke="#fff" stroke-width="1"/>
+            <text x="54" y="159" font-size="13" fill="#fff" text-anchor="end">120</text>
+
+            <!-- altitude tape -->
+            <rect x="326" y="30" width="62" height="25" fill="#000" stroke="#4a5262"/>
+            <text x="331" y="39" font-size="7" fill="#8b93a1">ALTS</text>
+            <text id="altsTxt" x="384" y="51" font-size="13" fill="var(--cyan)" text-anchor="end">5000</text>
+            <rect x="326" y="58" width="62" height="192" fill="rgba(0,0,0,0.45)"/>
+            <g clip-path="url(#altClip)">
+              <g id="altTicks"></g>
+              <path id="altBug" d="M326,0 h7 v-8 h-7 z" fill="var(--cyan)"/>
+            </g>
+            <polygon points="320,154 328,144 388,144 388,164 328,164" fill="#000" stroke="#fff" stroke-width="1"/>
+            <text id="altNow" x="384" y="159" font-size="13" fill="#fff" text-anchor="end">5000</text>
+            <rect class="hl hl-alt" x="322" y="26" width="70" height="228" rx="3"/>
+
+            <!-- HSI -->
+            <circle cx="196" cy="256" r="74" fill="rgba(8,11,15,0.9)" stroke="#2a323f"/>
+            <g id="rose"></g>
+            <g id="hdgBug"><path d="M188,179 h16 v8 h-5 l-3,4 l-3,-4 h-5 z" fill="var(--cyan)"/></g>
+            <path d="M196,262 l-3,-12 v-4 h6 v4 z M180,256 h32 v3 h-32 z M190,268 h12 v2 h-12 z" fill="#fff"/>
+            <polygon points="196,190 191,182 201,182" fill="#fff"/>
+            <rect x="176" y="164" width="40" height="17" fill="#000" stroke="#fff" stroke-width="1"/>
+            <text id="hdgNow" x="196" y="177" font-size="12" fill="#fff" text-anchor="middle">000°</text>
+            <rect x="80" y="186" width="64" height="22" fill="#000" stroke="#4a5262"/>
+            <text x="85" y="201" font-size="9" fill="#e7e4dc">HDG</text>
+            <text id="hdgBugTxt" x="140" y="202" font-size="13" fill="var(--cyan)" text-anchor="end">000°</text>
+            <rect class="hl hl-hdg" x="77" y="183" width="70" height="28" rx="3"/>
+            <circle class="hl hl-hdg" cx="196" cy="256" r="77"/>
+
+            <!-- top bar: AP annunciations + COM1 -->
+            <rect x="0" y="0" width="400" height="26" fill="#0b0e12"/>
+            <line x1="0" y1="26" x2="400" y2="26" stroke="#2a323f"/>
+            <g font-size="11" font-weight="600">
+              <text id="annLat" x="34" y="17" fill="var(--pfd-green)" text-anchor="middle">HDG</text>
+              <text x="104" y="17" fill="var(--pfd-green)" text-anchor="middle">AP</text>
+              <text id="annVert" x="164" y="17" fill="var(--pfd-green)" text-anchor="middle">ALT</text>
+              <text id="annArm" x="214" y="17" fill="#e7e4dc" text-anchor="middle"></text>
+            </g>
+            <line x1="250" y1="4" x2="250" y2="22" stroke="#2a323f"/>
+            <text x="257" y="16" font-size="8" fill="#8b93a1">COM1</text>
+            <text id="comAct" x="309" y="17" font-size="12" fill="#e7e4dc" text-anchor="middle">121.500</text>
+            <rect x="341" y="4" width="56" height="18" fill="none" stroke="var(--cyan)" stroke-width="1" rx="2"/>
+            <text id="comStby" x="369" y="17" font-size="11.5" fill="var(--cyan)" text-anchor="middle">124.350</text>
+
+            <!-- COM standby tuning overlay -->
+            <g id="comOverlay">
+              <rect x="0" y="0" width="400" height="330" fill="rgba(4,6,9,0.92)"/>
+              <text x="200" y="36" font-size="12" fill="#8b93a1" text-anchor="middle">COM1 STANDBY</text>
+              <g class="com-ring">
+                <path d="M116.6,261.4 A118,118 0 1 1 283.4,261.4" fill="none" stroke="var(--cyan)" stroke-width="3" stroke-linecap="round"/>
+                <polygon points="139.2,279.1 120.8,257.2 112.3,265.7" fill="var(--cyan)"/><polygon points="260.8,279.1 279.2,257.2 287.7,265.7" fill="var(--cyan)"/>
+              </g>
+              <text id="comBig" x="200" y="99" font-size="26" fill="var(--cyan)" text-anchor="middle">124.350</text>
+              <g id="keypad">
+                <g class="kp-key" data-key="1"><rect x="115" y="108" width="38" height="30" rx="4"/><text x="134.0" y="128.4" font-size="15" text-anchor="middle">1</text></g>
+                <g class="kp-key" data-key="2"><rect x="157" y="108" width="38" height="30" rx="4"/><text x="176.0" y="128.4" font-size="15" text-anchor="middle">2</text></g>
+                <g class="kp-key" data-key="3"><rect x="199" y="108" width="38" height="30" rx="4"/><text x="218.0" y="128.4" font-size="15" text-anchor="middle">3</text></g>
+                <g class="kp-key" data-key="4"><rect x="115" y="142" width="38" height="30" rx="4"/><text x="134.0" y="162.4" font-size="15" text-anchor="middle">4</text></g>
+                <g class="kp-key" data-key="5"><rect x="157" y="142" width="38" height="30" rx="4"/><text x="176.0" y="162.4" font-size="15" text-anchor="middle">5</text></g>
+                <g class="kp-key" data-key="6"><rect x="199" y="142" width="38" height="30" rx="4"/><text x="218.0" y="162.4" font-size="15" text-anchor="middle">6</text></g>
+                <g class="kp-key" data-key="7"><rect x="115" y="176" width="38" height="30" rx="4"/><text x="134.0" y="196.4" font-size="15" text-anchor="middle">7</text></g>
+                <g class="kp-key" data-key="8"><rect x="157" y="176" width="38" height="30" rx="4"/><text x="176.0" y="196.4" font-size="15" text-anchor="middle">8</text></g>
+                <g class="kp-key" data-key="9"><rect x="199" y="176" width="38" height="30" rx="4"/><text x="218.0" y="196.4" font-size="15" text-anchor="middle">9</text></g>
+                <g class="kp-key" data-key="."><rect x="115" y="210" width="38" height="30" rx="4"/><text x="134.0" y="230.4" font-size="15" text-anchor="middle">.</text></g>
+                <g class="kp-key" data-key="0"><rect x="157" y="210" width="38" height="30" rx="4"/><text x="176.0" y="230.4" font-size="15" text-anchor="middle">0</text></g>
+                <g class="kp-key" data-key="BKSP"><rect x="199" y="210" width="38" height="30" rx="4"/><text x="218.0" y="228.6" font-size="10" text-anchor="middle">BKSP</text></g>
+                <g class="kp-key kp-ent" data-key="ENT"><rect x="243" y="108" width="42" height="132" rx="4"/><text x="264" y="178" font-size="12" text-anchor="middle">ENT</text></g>
+              </g>
+              <text x="200" y="302" font-size="11" fill="#8b93a1" text-anchor="middle">type it (leading 1 optional) or twist the ring · ENT when done</text>
+              <text id="comOvAct" x="200" y="320" font-size="10" fill="#5d6574" text-anchor="middle">ACTIVE 121.500</text>
+            </g>
+          </svg>
+        </div>
+        <div class="pfd-hint" id="pfdHint">After an instruction: tap the correct knob, then dial it in.</div>
+        <div class="readout" aria-live="polite">
+          <p class="idle" id="readoutText">Click below to get your first instruction.</p>
+        </div>
+
+        <div class="action-row">
+          <button class="again-btn" id="againBtn">Click for ATC Instruction</button>
+          <button class="ptt-btn" id="pttBtn" type="button" hidden>PTT</button>
+        </div>
+        <div class="rb-result" id="rbResult" aria-live="polite"></div>
+        <div class="hint" id="hintLine">Space or Enter also works — keep one hand on the yoke.</div>
+
+
+      </div>
+
+      <div class="avionics-col">
+        <div class="avio-card">
+          <h3>GTN 650</h3>
+          <svg viewBox="0 0 236 112" role="img" aria-label="GTN 650 navigator bezel, com standby knob highlighted">
+            <rect x="1" y="1" width="234" height="110" rx="5" fill="#2a323f" stroke="#3a4454"/>
+            <rect x="10" y="10" width="142" height="92" rx="2" fill="#0b0e12" stroke="#000"/>
+            <line x1="18" y1="24" x2="138" y2="24" stroke="#2a323f" stroke-width="2"/>
+            <line x1="18" y1="38" x2="110" y2="38" stroke="#2a323f" stroke-width="2"/>
+            <circle cx="84" cy="68" r="19" fill="none" stroke="#2a323f" stroke-width="2"/>
+            <circle cx="192" cy="17" r="9" fill="#10141a" stroke="#3a4454" stroke-width="1.5"/>
+            <text x="192" y="20" font-size="6.5" fill="#8b93a1" text-anchor="middle" font-family="IBM Plex Sans, sans-serif">VOL</text>
+            <rect x="176" y="31" width="32" height="11" rx="2" fill="#10141a" stroke="#3a4454"/>
+            <text x="192" y="39" font-size="6.5" fill="#8b93a1" text-anchor="middle" font-family="IBM Plex Sans, sans-serif">CRSR</text>
+            <g id="knob-com" class="knob">
+              <circle cx="192" cy="76" r="22" fill="#10141a" stroke="#f5a623" stroke-width="2"/>
+              <circle cx="192" cy="76" r="10" fill="#10141a" stroke="#f5a623" stroke-width="1.5"/>
+              <text x="192" y="108" font-size="7.5" fill="#f5a623" text-anchor="middle" font-family="IBM Plex Sans, sans-serif">COM STBY</text>
+            </g>
+          </svg>
+          <div class="cap">Standby frequency — right knob</div>
+        </div>
+
+        <div class="avio-card">
+          <h3>GFC 500</h3>
+          <svg viewBox="0 0 236 104" role="img" aria-label="GFC 500 mode controller, heading and altitude knobs highlighted">
+            <rect x="1" y="1" width="234" height="102" rx="5" fill="#2a323f" stroke="#3a4454"/>
+            <g id="knob-hdg" class="knob">
+              <circle cx="40" cy="54" r="22" fill="#10141a" stroke="#f5a623" stroke-width="2"/>
+              <text x="40" y="98" font-size="8" fill="#f5a623" text-anchor="middle" font-family="IBM Plex Sans, sans-serif">HDG</text>
+            </g>
+            <rect x="72.0" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="85.5" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="99.0" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="112.5" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="126.0" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="139.5" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <rect x="153.0" y="14" width="11" height="10" rx="1.5" fill="#10141a" stroke="#3a4454"/>
+            <g id="knob-alt" class="knob">
+              <circle cx="196" cy="54" r="22" fill="#10141a" stroke="#f5a623" stroke-width="2"/>
+              <text x="196" y="98" font-size="8" fill="#f5a623" text-anchor="middle" font-family="IBM Plex Sans, sans-serif">ALT</text>
+            </g>
+          </svg>
+          <div class="cap">Heading &amp; altitude — left &amp; right knobs</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel settings-card">
+        <div class="settings">
+          <label class="toggle">
+            <input type="checkbox" id="captionsToggle">
+            Show captions
+          </label>
+          <div class="field">
+            <span><span class="label-green">DING</span> WITHIN (s)</span>
+            <input type="number" id="dingThreshold" min="0.5" max="10" step="0.5" value="3">
+          </div>
+          <div class="field">
+            <span><span class="label-red">BUZZER</span> AFTER (s)</span>
+            <input type="number" id="buzzerThreshold" min="1" max="15" step="0.5" value="5">
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="setEnable" checked>
+            Enable SET step
+          </label>
+          <label class="toggle" id="rbLabel">
+            <input type="checkbox" id="rbEnable">
+            <span id="rbLabelText">Enable READ BACK</span>
+          </label>
+          <div class="field">
+            <span>SET WITHIN (s)</span>
+            <input type="number" id="setThreshold" min="3" max="30" step="1" value="10">
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="continuousToggle">
+            Continuous
+          </label>
+          <div class="field">
+            <span>DELAY (s)</span>
+            <input type="number" id="continuousDelay" min="0" max="15" step="0.5" value="3">
+          </div>
+        </div>
+
+        <details class="vset" id="voiceSet">
+          <summary>Voice &amp; radio</summary>
+          <div class="vrow"><span>Voice</span><select id="voiceSelect" aria-label="Controller voice"></select></div>
+          <div class="vslider"><span>Speed</span><input type="range" id="rateSlider" min="0.6" max="1.6" step="0.05" value="1" aria-label="Speed"><output id="rateValue">1.00×</output></div>
+          <div class="vpresets">
+            <button class="vbtn" type="button" data-rate="0.85">Relaxed</button>
+            <button class="vbtn" type="button" data-rate="1">Normal</button>
+            <button class="vbtn" type="button" data-rate="1.15">Busy</button>
+            <button class="vbtn" type="button" data-rate="1.3">LA Saturday</button>
+          </div>
+          <div class="vslider"><span>Pitch</span><input type="range" id="pitchSlider" min="0.6" max="1.4" step="0.05" value="1" aria-label="Pitch"><output id="pitchValue">1.00</output></div>
+          <div class="vslider"><span>Volume</span><input type="range" id="volSlider" min="0.1" max="1" step="0.05" value="1" aria-label="Volume"><output id="volValue">100%</output></div>
+          <div class="vslider"><span>Static</span><input type="range" id="noiseSlider" min="0" max="1" step="0.05" value="0" aria-label="Static"><output id="noiseValue">0%</output></div>
+          <label class="toggle"><input type="checkbox" id="squelchToggle" checked> Squelch click at start and end of each transmission</label>
+          <div style="margin-top:8px"><button class="vbtn" type="button" id="sampleBtn">&#9654; Play sample</button></div>
+          <p class="vhint">Static plays under the voice; the browser's voice itself can't be filtered to sound like a radio. Saved on this device.</p>
+        </details>
+      </div>
+
+</div>
+
+<footer class="page-footer">
+  <div class="footer-link back-link">
+    <a href="https://geezer-geek-pilot-control-panel.netlify.app">&larr; Back to GeezerGeek Pilot Apps</a>
+  </div>
+  <div class="footer-link">
+    <a href="https://docs.google.com/document/d/1DKgs6nKMK6VDG0y59rxrQ6QCxwCi_waNuai61etXfFM/edit?usp=sharing" target="_blank" rel="noopener">Write-up on Simple Chair-Flying Exercise for Listen, Set, Read Back</a>
+  </div>
+  <div class="credit-line">Wayne McClelland, <a href="https://youtube.com/@GeezerGeekPilot" target="_blank" rel="noopener">GeezerGeek Pilot</a>, <a href="https://docs.google.com/document/d/1chfDa3JBCjsGykGjwrAFwOqMAS7d3_dIY9ieROLCIyU/edit?usp=sharing" target="_blank" rel="noopener">Reference Materials</a></div>
+  <div class="hit-counter" id="hitCounter"></div>
+
+  <button id="shareBtn" class="share-btn" type="button">
+    <svg class="share-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/>
+      <circle cx="6" cy="12" r="3"/>
+      <circle cx="18" cy="19" r="3"/>
+      <line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/>
+      <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/>
+    </svg>
+    <span>Share this app with pilot friends</span>
+  </button>
+</footer>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const readoutEl = $('readoutText');
+  const btn = $('againBtn');
+  const callsignInput = $('callsign');
+  const countEl = $('count');
+  const correctCountEl = $('correctCount');
+  const setCountEl = $('setCount');
+  const voiceSelect = $('voiceSelect');
+  const rateSlider = $('rateSlider');
+  const rateValue = $('rateValue');
+  const pitchSlider = $('pitchSlider');
+  const volSlider = $('volSlider');
+  const noiseSlider = $('noiseSlider');
+  const squelchToggle = $('squelchToggle');
+  const captionsToggle = $('captionsToggle');
+  const dingThresholdInput = $('dingThreshold');
+  const buzzerThresholdInput = $('buzzerThreshold');
+  const setThresholdInput = $('setThreshold');
+  const setEnable = $('setEnable');
+  const continuousToggle = $('continuousToggle');
+  const continuousDelayInput = $('continuousDelay');
+  const pfd = $('pfd');
+  const pfdHint = $('pfdHint');
+  const knobEls = { com: $('knob-com'), hdg: $('knob-hdg'), alt: $('knob-alt') };
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const HSI = { cx:196, cy:256 };
+  const ALT_CY = 154, ALT_SCALE = 0.1;      // tape: 100 ft = 10 units
+  // "close enough" — promptness over precision: within these, it snaps to the target and scores
+  const TOL = { hdg: 10, alt: 500, mhz: 1 };
+  // one detent of a tap, arrow key, wheel click, or 20° twist of the knob itself
+  const DETENT = { hdg: 5, alt: 500, mhz: 1, khz: 1 };
+  // v3.9 smooth twist (HDG/ALT move continuously); every knob snaps to the target the moment it comes
+  // within tolerance (or passes through it on a fast flick), then ignores the rest of the twist
+  const TUNE = {
+    knobCom: 10,        // degrees of COM knob twist per MHz (was 16.7)
+    ringCom: 8,         // degrees of twist on the PFD COM ring per MHz (was 12.5)
+    knobHdg: 0.25,      // bug degrees per degree of knob twist (a full turn = 90°)
+    knobAlt: 10,        // ALTS feet per degree of knob twist (a full turn ≈ 3,600 ft)
+    pfdHdg: 1.4,        // bug degrees per degree of finger arc on the HSI
+    pfdAlt: 20,         // ALTS feet per pixel of vertical drag on the tape
+    accel: 0.5,         // speed-sensitive gain strength (0 = linear)
+    accelMax: 2,        // most the gain can multiply by on a fast flick
+    knobVRef: 120,      // knob twist speed (deg/s) where the extra gain starts
+    hsiVRef: 120,       // HSI finger-arc speed (deg/s) where the extra gain starts
+    tapeVRef: 250,      // tape drag speed (px/s) where the extra gain starts
+    glideMs: 150        // snap glide on release
+  };
+  const TURN_RATE = 6;                      // deg/s (sim runs ~2x standard rate)
+  const CLIMB_RATE = 100;                   // ft/s (sim runs accelerated)
+
+  // ---------- counters ----------
+  let count = 0, correctCount = 0, setCount = 0;
+
+  // ---------- phase machine ----------
+  // idle → reach (instruction issued, waiting for the right knob)
+  //      → set   (knob tapped, PFD armed for dragging)
+  //      → done  (set correctly, or timed out and revealed)
+  let phase = 'idle';
+  let lastIssueAt = 0;
+  let current = null;             // {type, knob, target, display, ...}
+  let instructionStart = 0;
+  let lastReach = null;   // seconds from instruction start to the knob tap
+  let reachMissed = false;
+  let missTimer = null, giveUpTimer = null, setTimer = null, continuousTimer = null, flipTimer = null, flashTimer = null, keyEvalTimer = null;
+
+  // ---------- simulated aircraft / avionics state ----------
+  const S = {
+    hdg: 0, bug: 0,               // actual heading (float) and heading bug (int 0..359)
+    alt: 0, alts: 0,              // actual altitude (float) and selected altitude (ft)
+    bank: 0, pitch: 0,
+    comAct: {mhz:121, khz:500},
+    comStby: {mhz:124, khz:350}
+  };
+
+  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function pick(arr){ return arr[randInt(0,arr.length-1)]; }
+  function norm360(d){ return ((d % 360) + 360) % 360; }
+  function wrap180(d){ d = norm360(d); return d > 180 ? d - 360 : d; }
+  function pad3(n){ return String(n).padStart(3,'0'); }
+  function hdgLabel(h){ const r = norm360(Math.round(h)); return pad3(r === 0 ? 360 : r); }
+  function freqStr(f){ return f.mhz + '.' + pad3(f.khz); }
+  function freqEq(a,b){ return a.mhz === b.mhz && a.khz === b.khz; }
+
+  function initAircraft(){
+    S.hdg = S.bug = 5 * randInt(0,71);
+    S.alt = S.alts = 1000 * randInt(3,9);
+    S.comAct = randomFreqObj();
+    do { S.comStby = randomFreqObj(); } while (freqEq(S.comStby, S.comAct));
+  }
+
+  // ---------- phonetics ----------
+  const NATO = {A:'Alpha',B:'Bravo',C:'Charlie',D:'Delta',E:'Echo',F:'Foxtrot',G:'Golf',
+    H:'Hotel',I:'India',J:'Juliett',K:'Kilo',L:'Lima',M:'Mike',N:'November',O:'Oscar',
+    P:'Papa',Q:'Quebec',R:'Romeo',S:'Sierra',T:'Tango',U:'Uniform',V:'Victor',
+    W:'Whiskey',X:'X-ray',Y:'Yankee',Z:'Zulu'};
+  const DIGIT = {'0':'zero','1':'one','2':'two','3':'three','4':'four','5':'five',
+    '6':'six','7':'seven','8':'eight','9':'niner'};
+  const TENS_WORD = {10:'ten',20:'twenty',30:'thirty',40:'forty'};
+  const ONES_WORD = {1:'one',2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine'};
+
+  function spellDigits(str){
+    return str.split('').map(ch => DIGIT[ch] !== undefined ? DIGIT[ch] : ch).join(' ');
+  }
+  function spokenCallsign(raw){
+    const chars = raw.toUpperCase().replace(/[^A-Z0-9]/g,'').split('');
+    return chars.map(c => /[0-9]/.test(c) ? DIGIT[c] : (NATO[c] || c)).join(' ');
+  }
+  // AIM 4-2-8 / 4-2-9: 10,000 = "one zero thousand", 12,000 = "one two thousand"
+  function altitudeWords(alt){
+    const k = Math.floor(alt/1000);
+    return (k >= 10 ? spellDigits(String(k)) : (ONES_WORD[k] || String(k))) + ' thousand';
+  }
+
+  const FACILITIES = ['LA Center','Oakland Center','Denver Center','Seattle Center',
+    'Salt Lake Center','Albuquerque Center','SoCal Approach','NorCal Approach',
+    'Phoenix Approach','Las Vegas Approach'];
+
+  function randomFreqObj(){
+    const n = randInt(0,719); // 118.000 to 135.975 in 25 kHz steps
+    return { mhz: 118 + Math.floor(n/40), khz: (n % 40) * 25 };
+  }
+  function spokenFreqStr(f){ // "124.35", "124.325", "124.0" — as ATC would say it
+    return (f.mhz + f.khz/1000).toFixed(3).replace(/0+$/,'').replace(/\.$/, '.0');
+  }
+
+  // ---------- instruction builder (consistent with the current aircraft state) ----------
+  function buildInstruction(callsignRaw){
+    // v3.10: the airplane may still be turning or climbing toward the bug / ALTS. A new target has to be
+    // on the commanded side of BOTH the actual value and the selected one, so "left/right" and
+    // "climb/descend" hold for the airplane and for the knob. Each is measured from whichever of the two
+    // is further in the commanded direction.
+    const curHdg = norm360(Math.round(S.hdg));
+    const curAlt = S.alt;
+    const steady = Math.abs(wrap180(S.bug - S.hdg)) < 0.5;
+    // Candidate targets: past both the nose and the bug by at least 15° (ending in 0 or 5), knob travel
+    // from the bug under 60°, turn from the nose under 120°; altitudes in whole thousands, at least 500 ft
+    // past both the airplane and ALTS, knob travel from ALTS under 3,000 ft.
+    const hdgOpts = {Left: [], Right: []};
+    for (let h = 0; h < 360; h += 5){
+      const n = wrap180(h - S.hdg), b = wrap180(h - S.bug);
+      if (Math.abs(b) >= 60 || Math.abs(n) >= 120) continue;
+      if (n >= 15 && b >= 15) hdgOpts.Right.push(h);
+      if (n <= -15 && b <= -15) hdgOpts.Left.push(h);
+    }
+    const hiAlt = Math.max(curAlt, S.alts), loAlt = Math.min(curAlt, S.alts);
+    const climbOpts = [], descendOpts = [];
+    for (let a = 2000; a <= 11000; a += 1000){
+      if (Math.abs(a - S.alts) >= 3000) continue;
+      if (a >= hiAlt + 500) climbOpts.push(a);
+      if (a <= loAlt - 500) descendOpts.push(a);
+    }
+    const canClimb = climbOpts.length > 0, canDescend = descendOpts.length > 0;
+    const canTurn = hdgOpts.Left.length > 0 || hdgOpts.Right.length > 0;
+    let category = pick(['hdg','hdg','alt','alt','com']);
+    if (category === 'alt' && !canClimb && !canDescend) category = canTurn ? 'hdg' : 'com';
+    if (category === 'hdg' && !canTurn) category = (canClimb || canDescend) ? 'alt' : 'com';
+    let type;
+    if (category === 'hdg'){
+      const dir = steady ? (Math.random() < 0.5 ? 'Left' : 'Right')
+        : !hdgOpts.Left.length ? 'Right' : !hdgOpts.Right.length ? 'Left' : (Math.random() < 0.5 ? 'Left' : 'Right');
+      // mostly "turn left/right heading XXX"; a relative "turn right 20 degrees" about 1 time in 5, only when steady
+      type = (steady && Math.random() < 0.2) ? 'turn' + dir + 'Deg' : 'turn' + dir + 'Hdg';
+    } else if (category === 'alt'){
+      type = !canDescend ? 'climb' : !canClimb ? 'descend' : pick(['climb','descend']);
+    } else type = 'contact';
+
+    const csSpoken = spokenCallsign(callsignRaw);
+    const csDisplay = callsignRaw.toUpperCase();
+    let instrSpoken, display, knob, target, setLabel, hdgTol = TOL.hdg;
+
+    if (type === 'turnLeftHdg' || type === 'turnRightHdg'){
+      const left = type === 'turnLeftHdg';
+      const opts = hdgOpts[left ? 'Left' : 'Right'];
+      // favor real turns (20°+ past both) when there are any
+      const big = opts.filter(h => Math.abs(wrap180(h - S.hdg)) >= 20 && Math.abs(wrap180(h - S.bug)) >= 20);
+      const hdg = pick(big.length ? big : opts);
+      const hs = hdgLabel(hdg);
+      const word = left ? 'left' : 'right';
+      instrSpoken = `turn ${word}, heading ${spellDigits(hs)}`;
+      display = `${csDisplay}, turn ${word}, heading ${hs}`;
+      knob = 'hdg'; target = hdg; setLabel = `HDG ${hs}°`;
+    } else if (type === 'turnLeftDeg' || type === 'turnRightDeg'){
+      const left = type === 'turnLeftDeg';
+      const deg = pick([10,20,30]);
+      const hdg = norm360(curHdg + (left ? -deg : deg));
+      const word = left ? 'left' : 'right';
+      instrSpoken = `turn ${word} ${TENS_WORD[deg]} degrees`;
+      display = `${csDisplay}, turn ${word} ${deg} degrees`;
+      knob = 'hdg'; target = hdg; setLabel = `HDG ${hdgLabel(hdg)}°`; hdgTol = Math.min(TOL.hdg, deg / 2);
+    } else if (type === 'climb'){
+      const alt = pick(climbOpts);
+      instrSpoken = `climb and maintain ${altitudeWords(alt)}`;
+      display = `${csDisplay}, climb and maintain ${alt.toLocaleString()}`;
+      knob = 'alt'; target = alt; setLabel = `ALTS ${alt.toLocaleString()}`;
+    } else if (type === 'descend'){
+      const alt = pick(descendOpts);
+      instrSpoken = `descend and maintain ${altitudeWords(alt)}`;
+      display = `${csDisplay}, descend and maintain ${alt.toLocaleString()}`;
+      knob = 'alt'; target = alt; setLabel = `ALTS ${alt.toLocaleString()}`;
+    } else {
+      const facility = pick(FACILITIES);
+      let f;
+      do { f = randomFreqObj(); } while (Math.abs(f.mhz - S.comStby.mhz) < 3 || freqEq(f, S.comAct));
+      const fs = spokenFreqStr(f);
+      const [ip, dp] = fs.split('.');
+      instrSpoken = `contact ${facility}, ${spellDigits(ip)} point ${spellDigits(dp)}`;
+      display = `${csDisplay}, contact ${facility}, ${fs}`;
+      knob = 'com'; target = f; setLabel = `COM1 STBY ${freqStr(f)}`;
+    }
+    return {type, knob, target, setLabel, csSpoken, instrSpoken, display, hdgTol};
+  }
+
+  // ---------- PFD drawing ----------
+  function el(tag, attrs, text){
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function buildStatic(){
+    // compass rose
+    const rose = $('rose');
+    const R = 66;
+    const LABELS = {0:'N',30:'3',60:'6',90:'E',120:'12',150:'15',180:'S',210:'21',240:'24',270:'W',300:'30',330:'33'};
+    for (let d = 0; d < 360; d += 5){
+      const len = d % 10 === 0 ? 9 : 5;
+      rose.appendChild(el('line', {
+        x1:HSI.cx, y1:HSI.cy - R, x2:HSI.cx, y2:HSI.cy - R + len,
+        stroke:'#e7e4dc', 'stroke-width': d % 30 === 0 ? 1.8 : 1,
+        transform:`rotate(${d} ${HSI.cx} ${HSI.cy})`
+      }));
+      if (LABELS[d] !== undefined){
+        rose.appendChild(el('text', {
+          x:HSI.cx, y:HSI.cy - R + 22, 'font-size': LABELS[d].length > 1 || 'NESW'.includes(LABELS[d]) ? 12 : 12,
+          fill:'#e7e4dc', 'text-anchor':'middle', 'font-weight': 'NESW'.includes(LABELS[d]) ? 600 : 400,
+          transform:`rotate(${d} ${HSI.cx} ${HSI.cy})`
+        }, LABELS[d]));
+      }
+    }
+    // roll scale
+    const rs = $('rollScale');
+    [-60,-45,-30,-20,-10,0,10,20,30,45,60].forEach(a => {
+      const long = (a % 30 === 0);
+      rs.appendChild(el('line', {
+        x1:196, y1:130-88, x2:196, y2:130-88-(long ? 9 : 5),
+        transform:`rotate(${a} 196 130)`
+      }));
+    });
+    // airspeed tape (static 120 kt)
+    const as = $('asTicks');
+    for (let v = 60; v <= 180; v += 10){
+      const y = 154 - (v - 120) * 2;
+      as.appendChild(el('line', {x1:52, y1:y, x2:62, y2:y, stroke:'#e7e4dc', 'stroke-width':1}));
+      if (v % 20 === 0) as.appendChild(el('text', {x:48, y:y+4, 'font-size':10, fill:'#e7e4dc', 'text-anchor':'end'}, String(v)));
+    }
+  }
+
+  function drawAltTape(){
+    const g = $('altTicks');
+    const base = Math.floor((S.alt - 1100) / 100) * 100;
+    let html = '';
+    for (let v = base; v <= S.alt + 1100; v += 100){
+      if (v < 0) continue;
+      const y = (ALT_CY - (v - S.alt) * ALT_SCALE).toFixed(1);
+      html += `<line x1="378" y1="${y}" x2="388" y2="${y}" stroke="#e7e4dc" stroke-width="1"/>`;
+      if (v % 200 === 0) html += `<text x="374" y="${(+y + 4).toFixed(1)}" font-size="10" fill="#e7e4dc" text-anchor="end">${v}</text>`;
+    }
+    g.innerHTML = html;
+    let by = ALT_CY - (S.alts - S.alt) * ALT_SCALE;
+    by = Math.max(66, Math.min(250, by));
+    $('altBug').setAttribute('d', `M326,${(by-8).toFixed(1)} h8 v16 h-8 v-5 l4,-3 l-4,-3 z`);
+    $('altNow').textContent = String(Math.round(S.alt / 10) * 10);
+    $('altsTxt').textContent = String(Math.round(S.alts / 100) * 100);
+  }
+
+  function render(){
+    $('rose').setAttribute('transform', `rotate(${(-S.hdg).toFixed(2)} ${HSI.cx} ${HSI.cy})`);
+    $('hdgBug').setAttribute('transform', `rotate(${(S.bug - S.hdg).toFixed(2)} ${HSI.cx} ${HSI.cy})`);
+    $('hdgNow').textContent = hdgLabel(S.hdg) + '°';
+    $('hdgBugTxt').textContent = hdgLabel(S.bug) + '°';
+    drawAltTape();
+    $('horizon').setAttribute('transform', `rotate(${(-S.bank).toFixed(2)} 196 130) translate(0 ${(S.pitch*4).toFixed(2)})`);
+    $('rollPtr').setAttribute('transform', `rotate(${(-S.bank).toFixed(2)} 196 130)`);
+    const climbing = Math.abs(S.alts - S.alt) > 50;
+    $('annVert').textContent = climbing ? 'VS' : 'ALT';
+    $('annArm').textContent = climbing ? 'ALTS' : '';
+    $('comAct').textContent = freqStr(S.comAct);
+    $('comStby').textContent = freqStr(S.comStby);
+    const big = $('comBig');
+    const invalid = performance.now() < kpInvalidUntil;
+    big.textContent = invalid ? 'INVALID' : kpBuf ? kpBuf + '_' : freqStr(S.comStby);
+    big.classList.toggle('entry', invalid || !!kpBuf);
+    $('comOvAct').textContent = 'ACTIVE ' + freqStr(S.comAct);
+  }
+
+  // simple "autopilot": follows the heading bug and selected altitude live
+  let lastFrame = performance.now();
+  function tick(now){
+    const dt = Math.min(0.1, (now - lastFrame) / 1000);
+    lastFrame = now;
+    stepGlide(now);
+    const dh = wrap180(S.bug - S.hdg);
+    if (Math.abs(dh) > 0.05){
+      const step = Math.sign(dh) * Math.min(Math.abs(dh), TURN_RATE * dt * Math.min(1, Math.abs(dh) / 4 + 0.25));
+      S.hdg = norm360(S.hdg + step);
+    } else S.hdg = S.bug;
+    const bankTarget = Math.sign(dh) * Math.min(20, Math.abs(dh) * 3);
+    S.bank += (bankTarget - S.bank) * Math.min(1, dt * 3);
+    const da = S.alts - S.alt;
+    if (Math.abs(da) > 1){
+      const rate = Math.min(CLIMB_RATE, Math.abs(da) * 0.8 + 5);
+      S.alt += Math.sign(da) * Math.min(Math.abs(da), rate * dt);
+    } else S.alt = S.alts;
+    const pitchTarget = Math.sign(da) * Math.min(5, Math.abs(da) / 40);
+    S.pitch += (pitchTarget - S.pitch) * Math.min(1, dt * 3);
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- audio ----------
+  let audioCtx = null;
+  function getAudioCtx(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function micOpen(){ return pttDown || collecting; }   // PTT held or release tail still listening
+
+  // v3.12 radio audio: static bed + squelch clicks (Web Audio, no files) — same as Clearance Delivery Trainer
+  const RADIO = { bed:null, buf:null, tok:0 };
+  function ensureRadio(){
+    try {
+      const lvl = parseFloat(noiseSlider.value) || 0;
+      if (!RADIO.bed && lvl <= 0 && !squelchToggle.checked) return null;   // nothing to play: don't build it
+      const ctx = getAudioCtx();
+      if (!RADIO.buf){
+        const sr = ctx.sampleRate, buf = ctx.createBuffer(1, sr * 2, sr), d = buf.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < d.length; i++){ const w = Math.random()*2 - 1; b0 = .99765*b0 + w*.0990460; b1 = .96300*b1 + w*.2965164; b2 = .57000*b2 + w*1.0526913; d[i] = (b0 + b1 + b2 + w*.1848) * .11; }
+        RADIO.buf = buf;
+      }
+      if (!RADIO.bed && lvl > 0){
+        const src = ctx.createBufferSource(); src.buffer = RADIO.buf; src.loop = true;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.6;
+        RADIO.bed = ctx.createGain(); RADIO.bed.gain.value = 0;
+        src.connect(bp).connect(RADIO.bed).connect(ctx.destination); src.start();
+      }
+      return ctx;
+    } catch (e) { return null; }
+  }
+  function squelchClick(level){
+    if (!squelchToggle.checked || micOpen() || !audioCtx || !RADIO.buf) return;
+    const ctx = audioCtx, t = ctx.currentTime, src = ctx.createBufferSource(); src.buffer = RADIO.buf;
+    const g = ctx.createGain(); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5 * level, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    src.connect(hp).connect(g).connect(ctx.destination); src.start(t, Math.random()); src.stop(t + 0.16);
+  }
+  function radioOn(){
+    const tok = ++RADIO.tok;
+    if (!ensureRadio()) return tok;
+    const lvl = parseFloat(noiseSlider.value) || 0, t = audioCtx.currentTime;
+    squelchClick(Math.max(lvl, 0.35));
+    if (RADIO.bed){ RADIO.bed.gain.cancelScheduledValues(t); RADIO.bed.gain.setTargetAtTime(lvl * 0.6, t + 0.03, 0.02); }
+    return tok;
+  }
+  function radioOff(tok){
+    if (tok !== undefined && tok !== RADIO.tok) return;   // a newer transmission owns the radio
+    RADIO.tok++;
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    if (RADIO.bed){ RADIO.bed.gain.cancelScheduledValues(t); RADIO.bed.gain.setTargetAtTime(0, t, 0.02); }
+    squelchClick(Math.max(parseFloat(noiseSlider.value) || 0, 0.35));
+  }
+  function playTone(freqStart, freqEnd, duration, type, gainPeak){
+    if (micOpen()) return;
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqStart, ctx.currentTime);
+    if (freqEnd !== freqStart) osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), ctx.currentTime + duration);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(gainPeak, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration + 0.02);
+  }
+  function playDing(){
+    playTone(880, 880, 0.12, 'sine', 0.3);
+    setTimeout(() => playTone(1318.5, 1318.5, 0.18, 'sine', 0.3), 90);
+  }
+  function playSetChime(){ // three rising notes = value set correctly
+    playTone(659.3, 659.3, 0.1, 'triangle', 0.3);
+    setTimeout(() => playTone(880, 880, 0.1, 'triangle', 0.3), 85);
+    setTimeout(() => playTone(1318.5, 1318.5, 0.22, 'triangle', 0.3), 170);
+  }
+  function makeDistortionCurve(amount){
+    const k = amount, nSamples = 44100, curve = new Float32Array(nSamples);
+    for (let i = 0; i < nSamples; i++){
+      const x = (i / nSamples) * 2 - 1;
+      curve[i] = ((3 + k) * x * 20 * Math.PI / 180) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
+  }
+  function playBuzzer(){
+    if (micOpen()) return;
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime, duration = 0.5, gainPeak = 1.3;
+    const mix = ctx.createGain(); mix.gain.value = 1;
+    [98, 103, 93].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.6, now + duration);
+      osc.connect(mix); osc.start(now); osc.stop(now + duration + 0.02);
+    });
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = makeDistortionCurve(140); shaper.oversample = '4x';
+    mix.connect(shaper);
+    const envGain = ctx.createGain();
+    envGain.gain.setValueAtTime(0.0001, now);
+    envGain.gain.exponentialRampToValueAtTime(gainPeak, now + 0.015);
+    envGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    shaper.connect(envGain); envGain.connect(ctx.destination);
+  }
+  function safe(fn){ try { fn(); } catch (err) { /* feedback only */ } }
+
+  // ---------- knob flashes ----------
+  function flashKnob(elx, state){
+    if (!elx) return;
+    elx.classList.remove('success', 'fail', 'neutral');
+    void window.getComputedStyle(elx).opacity;
+    elx.classList.add(state);
+    setTimeout(() => elx.classList.remove(state), 700);
+  }
+  function clearKnobFlashes(){
+    Object.values(knobEls).forEach(e => e && e.classList.remove('success', 'fail', 'neutral'));
+  }
+
+  // ---------- PFD modes ----------
+  const HINTS = {
+    hdg: 'HDG armed — drag around the HSI, or twist the knob · snaps when within 10°',
+    alt: 'ALT armed — drag up/down, or twist the knob · snaps when within 500 ft',
+    com: 'COM armed — type the frequency (leading 1 optional), twist the ring, or twist the knob'
+  };
+  function setMode(mode){
+    pfd.classList.remove('mode-hdg','mode-alt','mode-com','armed');
+    kpBuf = '';
+    Object.entries(knobEls).forEach(([k, e]) => {
+      e.classList.toggle('armed', k === mode);
+      e.ownerSVGElement.classList.toggle('armed', k === mode);
+    });
+    if (mode){ clearTimeout(flashTimer); pfd.classList.remove('flash-ok','flash-bad','com-result'); }
+    if (mode){
+      pfd.classList.add('mode-' + mode, 'armed');
+      pfdHint.textContent = HINTS[mode];
+      pfdHint.classList.add('armed');
+    } else {
+      pfdHint.classList.remove('armed');
+    }
+  }
+  function flashPfd(knob, ok){
+    clearTimeout(flashTimer);
+    pfd.classList.remove('flash-ok','flash-bad','com-result');
+    pfd.querySelectorAll('.hl').forEach(h => h.classList.remove('show'));
+    pfd.querySelectorAll('.hl-' + knob).forEach(h => h.classList.add('show'));
+    void pfd.getBoundingClientRect();
+    pfd.classList.add(ok ? 'flash-ok' : 'flash-bad');
+    if (knob === 'com') pfd.classList.add('com-result');
+    flashTimer = setTimeout(() => {
+      pfd.classList.remove('flash-ok','flash-bad','com-result');
+      pfd.querySelectorAll('.hl').forEach(h => h.classList.remove('show'));
+    }, 1100);
+  }
+
+  function currentValueMatches(){ // within tolerance = good enough
+    if (!current) return false;
+    if (current.knob === 'hdg') return Math.abs(wrap180(S.bug - current.target)) <= current.hdgTol;
+    if (current.knob === 'alt') return Math.abs(S.alts - current.target) <= TOL.alt;
+    return Math.abs(S.comStby.mhz - current.target.mhz) <= TOL.mhz;   // left of the decimal is what's scored
+  }
+  function applyTarget(){
+    if (current.knob === 'hdg') startGlide('hdg', current.target);
+    else if (current.knob === 'alt') startGlide('alt', current.target);
+    else S.comStby = {...current.target};
+  }
+  // v3.9: snap glides to the exact value instead of jumping
+  let glide = null;
+  function startGlide(kind, to){
+    const from = kind === 'hdg' ? S.bug : S.alts;
+    const delta = kind === 'hdg' ? wrap180(to - from) : to - from;
+    if (TUNE.glideMs <= 0 || Math.abs(delta) < 0.01){ glide = null; setVal(kind, to); return; }
+    glide = {kind, from, delta, to, t0: performance.now()};
+  }
+  function stepGlide(now){
+    if (!glide) return;
+    const t = Math.min(1, (now - glide.t0) / TUNE.glideMs);
+    const e = 1 - Math.pow(1 - t, 3);   // ease-out
+    if (t >= 1){ setVal(glide.kind, glide.to); glide = null; }
+    else setVal(glide.kind, glide.from + glide.delta * e);
+  }
+  function setVal(kind, v){
+    if (kind === 'hdg') S.bug = norm360(v);
+    else S.alts = Math.max(0, Math.min(17500, v));
+  }
+
+  function clearTimers(){
+    [missTimer, giveUpTimer, setTimer, continuousTimer, flipTimer, keyEvalTimer].forEach(clearTimeout);
+  }
+
+  function showResult(ok){
+    readoutEl.className = '';
+    readoutEl.textContent = (ok ? '✓ ' : '✗ ') + current.display + '  →  ' + current.setLabel
+      + (lastReach !== null ? `  · knob ${lastReach.toFixed(1)} s` : '');
+  }
+
+  function finish(ok, knobOnly, holdKeypad){
+    const knob = current.knob;
+    phase = 'done';
+    clearTimeout(setTimer); clearTimeout(giveUpTimer); clearTimeout(keyEvalTimer); clearTimeout(missTimer);
+    if (holdKeypad){
+      const buf = kpBuf;
+      setMode(null);
+      kpBuf = buf; kpHold = true;
+      pfd.classList.add('kp-held');
+      render();
+    } else setMode(null);
+    if (rbEnable.checked && !rbAttempted) deferredResult = ok;   // shown after the pilot's PTT readback
+    else showResult(ok);
+    if (holdKeypad) pfdHint.textContent = 'Set — read it back. ENT puts it in standby.';
+    else if (knobOnly) pfdHint.textContent = 'SET step off — the PFD was set for you.';
+    else pfdHint.textContent = ok ? 'Set correctly.' : 'Not set in time — correct value shown.';
+    if (knob === 'com') pendingFlip = true;   // standby → active when the next instruction is requested
+    // Continuous: with READ BACK on, wait for the readback (finishReadback starts the delay);
+    // if the pilot never keys the mic, move on after the delay plus a grace period
+    if (continuousToggle.checked) scheduleContinuous(contDelayMs() + (rbEnable.checked && !rbAttempted ? RB_GRACE_MS : 0));
+  }
+
+  function evaluateSet(){
+    if (phase !== 'set' || !currentValueMatches()) return;
+    drag = null; knobDrag = null;
+    applyTarget();   // snap to the exact value
+    render();
+    setCount += 1;
+    setCountEl.textContent = `SET CORRECT ${setCount}`;
+    safe(playSetChime);
+    flashPfd(current.knob, true);
+    finish(true);
+  }
+
+  function reveal(){
+    if (phase !== 'set' && phase !== 'reach') return;
+    applyTarget();
+    render();
+    safe(playBuzzer);
+    flashPfd(current.knob, false);
+    finish(false);
+  }
+
+  const RB_GRACE_MS = 8000;
+  function contDelayMs(){ const d = parseFloat(continuousDelayInput.value); return (isNaN(d) ? 3 : d) * 1000 + 1200; }
+  function scheduleContinuous(ms){
+    clearTimeout(continuousTimer);
+    if (!continuousToggle.checked) return;
+    continuousTimer = setTimeout(() => {
+      if (micOpen()) return;   // a readback is in progress; finishReadback reschedules
+      issueNext(true);
+    }, ms);
+  }
+  function setWithin(){ const v = parseFloat(setThresholdInput.value); return (isNaN(v) ? 10 : v) * 1000; }
+
+  // ---------- knob taps ----------
+  function handleKnobClick(knobType){
+    if (typeof warmStart === 'function' && phase === 'reach') warmStart();
+    if (phase !== 'reach') return;
+    const correctKnob = current.knob;
+    if (knobType !== correctKnob){
+      safe(() => { playBuzzer(); flashKnob(knobEls[knobType], 'fail'); });
+      return;
+    }
+    clearTimeout(missTimer); clearTimeout(giveUpTimer);
+    const dingThresh = parseFloat(dingThresholdInput.value) || 3;
+    const elapsed = Math.max(0, (performance.now() - instructionStart) / 1000);
+    lastReach = elapsed;
+    const knobEl = knobEls[knobType];
+    if (!reachMissed && elapsed <= dingThresh){
+      correctCount += 1;
+      correctCountEl.textContent = `KNOB ON-TIME ${correctCount}`;
+      safe(() => { playDing(); flashKnob(knobEl, 'success'); });
+    } else {
+      safe(() => flashKnob(knobEl, 'neutral'));
+    }
+    if (!setEnable.checked){
+      const onTime = !reachMissed && elapsed <= dingThresh;
+      applyTarget(); render();
+      finish(onTime, true);
+      return;
+    }
+    phase = 'set';
+    setMode(correctKnob);
+    pfdHint.textContent = `Knob ${elapsed.toFixed(1)} s — ` + pfdHint.textContent;
+    setTimer = setTimeout(reveal, setWithin());
+  }
+  Object.entries(knobEls).forEach(([type, e]) => {
+    if (e) e.addEventListener('pointerdown', (ev) => { if (phase === 'reach'){ ev.preventDefault(); handleKnobClick(type); } });
+  });
+
+  // twist arc: 270° around the knob, open at the bottom, arrowheads at both ends
+  function addKnobArc(g){
+    const c = g.querySelector('circle');
+    const cx = +c.getAttribute('cx'), cy = +c.getAttribute('cy'), r = (+c.getAttribute('r') + 6) * 1.5;
+    const P = (deg, rr) => { const a = deg * Math.PI / 180; return [cx + rr * Math.sin(a), cy - rr * Math.cos(a)]; };
+    const [x1, y1] = P(-135, r), [x2, y2] = P(135, r);
+    g.appendChild(el('path', {class:'knob-arc', d:`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 1 1 ${x2.toFixed(1)},${y2.toFixed(1)}`}));
+    [-135, 135].forEach(end => {
+      const tip = P(end + (end < 0 ? -14 : 14), r), a = P(end, r - 4.5), b = P(end, r + 4.5);
+      g.appendChild(el('polygon', {class:'knob-arc-head', points:`${tip.map(v=>v.toFixed(1)).join(',')} ${a.map(v=>v.toFixed(1)).join(',')} ${b.map(v=>v.toFixed(1)).join(',')}`}));
+    });
+    g.dataset.cx = cx; g.dataset.cy = cy; g.dataset.arcR = r;
+    // generous invisible touch target (knob + arc + a fingertip)
+    g.insertBefore(el('circle', {class:'knob-hit', cx, cy, r: r + 6, fill:'transparent'}), g.firstChild);
+  }
+  Object.values(knobEls).forEach(addKnobArc);
+
+  let knobDrag = null;
+  function knobAngle(g, evt){
+    const svg = g.ownerSVGElement;
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return Math.atan2(p.x - +g.dataset.cx, -(p.y - +g.dataset.cy)) * 180 / Math.PI;
+  }
+  function knobDist(g, evt){   // distance from the knob center, in the knob's SVG units
+    const svg = g.ownerSVGElement;
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return Math.hypot(p.x - +g.dataset.cx, p.y - +g.dataset.cy);
+  }
+  const KNOB_DEAD = 8;        // SVG units: too close to the center to read an angle
+  const KNOB_REACH = 2.6;     // a twist can start out to this many times the cyan arc's radius
+  function startKnobTwist(type, g, e){
+    e.preventDefault();
+    g.setPointerCapture(e.pointerId);
+    knobDrag = {type, last: knobAngle(g, e), acc: 0, t: performance.now(), v: null, moved: false};
+  }
+  // v3.10: a twist can start anywhere around the armed knob — inside the arc or well outside it,
+  // even past the edge of the panel drawing — not just on the knob itself
+  document.addEventListener('pointerdown', (e) => {
+    if (phase !== 'set' || !current || knobDrag) return;
+    const type = current.knob, g = knobEls[type];
+    if (!g || g.contains(e.target)) return;                         // on the knob: its own handler
+    if (e.target.closest && e.target.closest('#pfd, button, input, select, textarea, a, label, .tb-panel')) return;
+    if (knobDist(g, e) > +g.dataset.arcR * KNOB_REACH) return;
+    startKnobTwist(type, g, e);
+  }, true);
+  // keep the page from scrolling under a twist that started outside the drawing
+  document.addEventListener('touchmove', (e) => { if (knobDrag) e.preventDefault(); }, {passive:false});
+  Object.entries(knobEls).forEach(([type, g]) => {
+    g.addEventListener('pointerdown', (e) => {
+      if (phase !== 'set' || current.knob !== type) return;
+      startKnobTwist(type, g, e);
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!knobDrag || knobDrag.type !== type || phase !== 'set') return;
+      e.preventDefault();
+      const a = knobAngle(g, e);
+      const da = wrap180(a - knobDrag.last);
+      knobDrag.last = a;
+      if (knobDist(g, e) < KNOB_DEAD) return;   // near the center the angle jumps around; just track it
+      if (type !== 'com'){
+        const m = speedGain(knobDrag, da, TUNE.knobVRef, performance.now());
+        if (da) knobDrag.moved = true;
+        twist(type, da * m * (type === 'hdg' ? TUNE.knobHdg : TUNE.knobAlt));
+        return;
+      }
+      knobDrag.acc += da;
+      const steps = Math.trunc(knobDrag.acc / TUNE.knobCom);
+      if (steps){
+        knobDrag.acc -= steps * TUNE.knobCom;
+        stepMhz(steps);
+      }
+    });
+    const end = () => {
+      if (!knobDrag || knobDrag.type !== type) return;
+      const moved = knobDrag.moved;
+      knobDrag = null;
+      if (type !== 'com' && moved) releaseTwist(type);
+    };
+    g.addEventListener('pointerup', end);
+    g.addEventListener('pointercancel', end);
+    g.ownerSVGElement.addEventListener('touchmove', (e) => { if (phase === 'set') e.preventDefault(); }, {passive:false});
+  });
+
+  // ---------- PFD gestures ----------
+  let drag = null;
+  let kpBuf = '';        // GTN-style keypad entry in progress
+  let kpInvalidUntil = 0;
+  let kpHold = false;       // keypad left open after a typed match, for the readback
+  let didFirstScroll = false;
+  let rbAttempted = false, deferredResult = null;   // READ BACK: hold the result line until after the readback
+  let pendingFlip = false;  // a COM call was completed; flip at the next instruction
+  function svgPoint(evt){
+    const pt = pfd.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(pfd.getScreenCTM().inverse());
+  }
+  function comAngle(p){ return Math.atan2(p.x - 200, -(p.y - 178)) * 180 / Math.PI; }
+  function angleAt(p){ return Math.atan2(p.x - HSI.cx, -(p.y - HSI.cy)) * 180 / Math.PI; }
+
+  function nudge(kind, steps, unit){   // unit: amount per step (default: fine step)
+    glide = null;
+    if (kind === 'hdg') S.bug = norm360(Math.round(S.bug) + steps * (unit || 1));
+    else if (kind === 'alt') S.alts = Math.max(0, Math.min(17500, Math.round(S.alts / 100) * 100 + steps * (unit || 100)));
+    else if (kind === 'mhz') S.comStby = {mhz: 118 + norm(S.comStby.mhz - 118 + steps, 19), khz: S.comStby.khz};
+    else if (kind === 'khz') S.comStby = {mhz: S.comStby.mhz, khz: norm(S.comStby.khz / 25 + steps, 40) * 25};
+    render();
+    evaluateSet();
+  }
+  function norm(v, n){ return ((v % n) + n) % n; }
+
+  // v3.9 smooth twist: speed-sensitive gain, value moves continuously, nothing scored mid-twist
+  function speedGain(st, amount, vRef, now){
+    const dt = Math.max(8, now - st.t) / 1000;
+    st.t = now;
+    const v = Math.abs(amount) / dt;
+    st.v = (st.v || 0) + (v - (st.v || 0)) * Math.min(1, dt * 12);   // smoothed speed; starts at rest so the first move can't spike
+    if (TUNE.accel <= 0 || st.v <= vRef) return 1;
+    return Math.min(TUNE.accelMax, 1 + TUNE.accel * (st.v / vRef - 1));
+  }
+  function twist(kind, amount){   // amount in degrees (hdg) or feet (alt), already scaled
+    glide = null;
+    const prev = kind === 'hdg' ? S.bug : S.alts;
+    setVal(kind, prev + amount);
+    const now = kind === 'hdg' ? S.bug : S.alts;
+    render();
+    // snap the moment it's within tolerance, or if this move jumped across the target
+    if (phase !== 'set' || current.knob !== kind) return;
+    const t = current.target;
+    let hit;
+    if (kind === 'hdg'){
+      const d0 = wrap180(prev - t), d1 = wrap180(now - t);
+      hit = Math.abs(d1) <= current.hdgTol || (Math.sign(d0) !== Math.sign(d1) && Math.abs(d0) + Math.abs(d1) < 90);
+    } else {
+      hit = Math.abs(now - t) <= TOL.alt || (prev - t) * (now - t) <= 0;
+    }
+    if (hit){ if (!currentValueMatches()) setVal(kind, t); evaluateSet(); }   // evaluateSet glides it onto the target
+  }
+  // COM: step one MHz at a time so a fast twist can't jump past the target
+  function stepMhz(steps){
+    const dir = Math.sign(steps);
+    for (let i = 0; i < Math.abs(steps); i++){
+      nudge('mhz', dir);
+      if (phase !== 'set') break;
+    }
+  }
+  // on release short of the target: rest on the nearest 1° / 500 ft
+  function releaseTwist(kind){
+    if (phase !== 'set') return;
+    if (currentValueMatches()){ evaluateSet(); return; }
+    startGlide(kind, kind === 'hdg' ? Math.round(S.bug) : Math.round(S.alts / 500) * 500);
+  }
+
+  // GTN rules: leading "1" optional (21.7 = 121.7); no decimal → MHz is the first 3 digits
+  // ("1…") or "1" + first 2; kHz padded to 3 digits and rounded to the nearest 25 kHz
+  function parseKeypad(buf){
+    let ip, fp;
+    if (buf.includes('.')) [ip, fp] = buf.split('.');
+    else if (buf[0] === '1' && +buf.slice(0, 3) >= 118 && +buf.slice(0, 3) <= 136){ ip = buf.slice(0, 3); fp = buf.slice(3); }
+    else { ip = buf.slice(0, 2); fp = buf.slice(2); }
+    if (ip.length === 2) ip = '1' + ip;
+    if (ip.length !== 3) return null;
+    const mhz = parseInt(ip, 10);
+    let khz = Math.round(parseInt((fp || '').padEnd(3, '0').slice(0, 3), 10) / 25) * 25;
+    if (khz >= 1000) khz = 975;
+    if (isNaN(mhz) || mhz < 118 || mhz > 136) return null;
+    return {mhz, khz};
+  }
+  function flipCom(){ const a = S.comAct; S.comAct = S.comStby; S.comStby = a; render(); }
+  // close a held keypad: ENT puts what was typed in STANDBY (no flip, as on the GTN);
+  // closed by the next call instead → the correct value goes in standby
+  function closeHeld(entered){
+    if (!kpHold) return;
+    kpHold = false;
+    pfd.classList.remove('kp-held');
+    if (entered) S.comStby = entered; else applyTarget();
+    kpBuf = '';
+    render();
+  }
+  function keypadPress(k){
+    const live = phase === 'set' && current.knob === 'com';
+    if (!live && !kpHold) return;
+    if (k === 'BKSP') kpBuf = kpBuf.slice(0, -1);
+    else if (k === 'ENT'){
+      if (!kpBuf) return;
+      const f = parseKeypad(kpBuf);
+      if (!f){ kpBuf = ''; kpInvalidUntil = performance.now() + 800; render(); return; }
+      if (kpHold){ closeHeld(f); return; }
+      kpBuf = '';
+      S.comStby = f;
+      render(); evaluateSet();
+      return;
+    }
+    else if (k === '.'){ if (!kpBuf.includes('.') && kpBuf.length < 6) kpBuf += '.'; }
+    else if (kpBuf.replace('.', '').length < 6) kpBuf += k;
+    render();
+    // typed MHz matches → SET CORRECT now, no ENT needed; the entry stays up for the readback
+    if (live){
+      const f = parseKeypad(kpBuf);
+      if (f && f.mhz === current.target.mhz){
+        setCount += 1;
+        setCountEl.textContent = `SET CORRECT ${setCount}`;
+        safe(playSetChime);
+        finish(true, false, true);
+      }
+    }
+  }
+
+  pfd.addEventListener('pointerdown', (e) => {
+    const keyEl = e.target.closest && e.target.closest('.kp-key');
+    if (keyEl && kpHold){
+      e.preventDefault();
+      keyEl.classList.add('pressed'); setTimeout(() => keyEl.classList.remove('pressed'), 130);
+      keypadPress(keyEl.dataset.key);
+      return;
+    }
+    if (phase !== 'set') return;
+    if (keyEl && current.knob === 'com'){
+      e.preventDefault();
+      keyEl.classList.add('pressed'); setTimeout(() => keyEl.classList.remove('pressed'), 130);
+      keypadPress(keyEl.dataset.key);
+      return;
+    }
+    e.preventDefault();
+    pfd.setPointerCapture(e.pointerId);
+    const p = svgPoint(e);
+    const mode = current.knob;
+    const base = {mode, p0: p, x0: e.clientX, y0: e.clientY, moved: false};
+    if (mode === 'hdg') drag = {...base, lastAng: angleAt(p), acc: 0, t: performance.now(), v: null};
+    else if (mode === 'alt') drag = {...base, lastY: e.clientY, acc: 0, t: performance.now(), v: null};
+    else drag = {...base, part: 'mhz', lastAng: comAngle(p), acc: 0};
+  });
+  pfd.addEventListener('pointermove', (e) => {
+    if (!drag || phase !== 'set') return;
+    e.preventDefault();
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) drag.moved = true;
+    if (drag.mode === 'hdg'){
+      const a = angleAt(svgPoint(e));
+      const da = wrap180(a - drag.lastAng);
+      drag.lastAng = a;
+      const m = speedGain(drag, da, TUNE.hsiVRef, performance.now());
+      if (drag.moved) twist('hdg', da * m * TUNE.pfdHdg);
+    } else if (drag.mode === 'alt'){
+      const dy = drag.lastY - e.clientY;
+      drag.lastY = e.clientY;
+      const m = speedGain(drag, dy, TUNE.tapeVRef, performance.now());
+      if (drag.moved) twist('alt', dy * m * TUNE.pfdAlt);
+    } else {
+      const a = comAngle(svgPoint(e));
+      drag.acc += wrap180(a - drag.lastAng);
+      drag.lastAng = a;
+      const steps = Math.trunc(drag.acc / TUNE.ringCom);
+      if (steps){ drag.acc -= steps * TUNE.ringCom; stepMhz(steps); }
+    }
+  });
+  function endDrag(e){
+    if (!drag) return;
+    if (!drag.moved && e && e.type === 'pointerup'){
+      // a tap (no drag) = fine trim: one step toward the side tapped
+      const p = drag.p0;
+      const d = drag;
+      drag = null;
+      if (d.mode === 'hdg') nudge('hdg', p.x >= HSI.cx ? 1 : -1, DETENT.hdg);
+      else if (d.mode === 'alt') nudge('alt', p.y <= ALT_CY ? 1 : -1, DETENT.alt);
+      else nudge('mhz', p.x >= 200 ? 1 : -1);   // tap right/left of center = ±1 MHz
+      return;
+    }
+    const mode = drag.mode;
+    drag = null;
+    if (mode === 'hdg' || mode === 'alt') releaseTwist(mode);
+    else evaluateSet();   // checked when the finger lifts, like letting go of the knob
+  }
+  pfd.addEventListener('pointerup', endDrag);
+  pfd.addEventListener('pointercancel', endDrag);
+  // iOS: make sure the page doesn't scroll while dialing
+  pfd.addEventListener('touchmove', (e) => { if (phase === 'set') e.preventDefault(); }, {passive:false});
+
+  // ---------- mouse wheel: works when the pointer is near the control being set ----------
+  // zones in PFD units (x1, y1, x2, y2); the armed knob (with its ring) counts too
+  const WHEEL_ZONES = {
+    hdg: [[116, 176, 276, 330], [77, 183, 147, 211]],    // HSI + HDG box
+    alt: [[320, 26, 392, 254]],                          // ALTS box + altitude tape
+    com: [[0, 0, 400, 330]]                              // the COM overlay covers the PFD
+  };
+  const WHEEL_PAD = 40;      // px of "close enough" around each zone
+  const WHEEL_PX_STEP = 50;  // px of scroll per step (trackpads scale smoothly; a 100 px mouse notch = 2 steps)
+  let wheelAcc = 0;
+  function nearTarget(e){
+    const mode = current.knob, m = pfd.getScreenCTM();
+    const inPad = (x1, y1, x2, y2) => e.clientX >= x1 - WHEEL_PAD && e.clientX <= x2 + WHEEL_PAD &&
+                                      e.clientY >= y1 - WHEEL_PAD && e.clientY <= y2 + WHEEL_PAD;
+    for (const [x1, y1, x2, y2] of WHEEL_ZONES[mode]){
+      if (inPad(m.a * x1 + m.e, m.d * y1 + m.f, m.a * x2 + m.e, m.d * y2 + m.f)) return true;
+    }
+    const k = knobEls[mode].getBoundingClientRect();
+    return inPad(k.left, k.top, k.right, k.bottom);
+  }
+  document.addEventListener('wheel', (e) => {
+    if (phase !== 'set' || !nearTarget(e)) return;   // elsewhere: normal page scroll
+    e.preventDefault();
+    let dy = e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1);
+    if (Math.sign(dy) !== Math.sign(wheelAcc)) wheelAcc = 0;   // direction change: start fresh
+    wheelAcc += dy;
+    let steps = Math.trunc(wheelAcc / WHEEL_PX_STEP);
+    if (!steps) return;
+    wheelAcc -= steps * WHEEL_PX_STEP;
+    steps = Math.max(-3, Math.min(3, -steps));   // wheel up = increase; cap a hard flick at 3 steps per event
+    const mode = current.knob;
+    if (mode === 'com') nudge('mhz', steps);
+    else nudge(mode, steps, DETENT[mode]);
+  }, {passive:false});
+
+  // ---------- speech ----------
+  // v3.12 voice prefs (per device; storage may be blocked)
+  const VPREF_KEY = 'atc.voice.v1';
+  let VPREFS = {};
+  try { VPREFS = JSON.parse(localStorage.getItem(VPREF_KEY) || '{}') || {}; } catch (e) { VPREFS = {}; }
+  function saveVoicePrefs(){
+    VPREFS = { voice: voiceSelect.value || VPREFS.voice, rate:+rateSlider.value, pitch:+pitchSlider.value,
+      vol:+volSlider.value, noise:+noiseSlider.value, squelch: squelchToggle.checked };
+    try { localStorage.setItem(VPREF_KEY, JSON.stringify(VPREFS)); } catch (e) {}
+  }
+  let voices = [];
+  function loadVoices(){
+    voices = speechSynthesis.getVoices();
+    const englishVoices = voices.filter(v => /^en/i.test(v.lang));
+    const list = englishVoices.length ? englishVoices : voices;
+    const keep = voiceSelect.value || VPREFS.voice;   // a later voiceschanged must not reset the choice
+    voiceSelect.innerHTML = '';
+    list.forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+    if (!list.length){ voiceSelect.innerHTML = '<option value="">Default</option>'; return; }
+    let pick = list.find(v => v.name === keep);
+    for (const want of [/^Samantha\b/i, /Google US English/i, /^Alex\b/i, /^Aaron\b/i]){   // in this order of preference
+      if (pick) break;
+      pick = list.find(v => /en-US/i.test(v.lang) && want.test(v.name));
+    }
+    if (!pick) pick = list.find(v => /en-US/i.test(v.lang)) || list[0];
+    voiceSelect.value = pick.name;
+  }
+  if ('speechSynthesis' in window){
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
+  }
+  function makeUtt(text, rate){
+    const u = new SpeechSynthesisUtterance(text);
+    const chosen = voices.find(v => v.name === voiceSelect.value);
+    if (chosen) u.voice = chosen;
+    u.rate = Math.min(2, rate);
+    u.pitch = parseFloat(pitchSlider.value) || 1;
+    u.volume = parseFloat(volSlider.value);
+    if (!(u.volume >= 0)) u.volume = 1;
+    return u;
+  }
+
+  function speak(csText, instrText, onInstrStart){
+    if (!('speechSynthesis' in window)){ if (onInstrStart) onInstrStart(); return; }
+    speechSynthesis.cancel();
+    const rate = parseFloat(rateSlider.value) || 1;
+    const uttCs = makeUtt(csText + ',', rate);
+    const uttInstr = makeUtt(instrText, rate);
+    const rtok = radioOn();
+    if (onInstrStart){ uttCs.onend = onInstrStart; uttInstr.onstart = onInstrStart; }
+    uttInstr.onend = () => { radioOff(rtok); onAtcDone(); };
+    uttInstr.onerror = () => radioOff(rtok);
+    uttCs.onerror = (e) => { if (e && e.error !== 'interrupted' && e.error !== 'canceled') radioOff(rtok); };
+    speechSynthesis.speak(uttCs);
+    speechSynthesis.speak(uttInstr);
+  }
+  // Play sample: does not touch the drill state
+  function speakSample(){
+    if (!('speechSynthesis' in window)) return;
+    if (speechSynthesis.speaking || micOpen() || (current && phase === 'reach')) return;
+    speechSynthesis.cancel();
+    const cs = (callsignInput.value || '').trim();
+    const u = makeUtt((cs ? spokenCallsign(cs) + ', ' : '') + 'turn left heading two seven zero, climb and maintain five thousand.', parseFloat(rateSlider.value) || 1);
+    const rtok = radioOn();
+    u.onend = () => radioOff(rtok);
+    u.onerror = () => radioOff(rtok);
+    speechSynthesis.speak(u);
+  }
+
+  function armMissTimer(){
+    clearTimeout(missTimer);
+    const buzzerThresh = parseFloat(buzzerThresholdInput.value) || 5;
+    const wait = Math.max(0, instructionStart - performance.now()) + buzzerThresh * 1000;
+    missTimer = setTimeout(() => {
+      if (phase === 'reach' && !reachMissed){
+        reachMissed = true;
+        safe(() => { playBuzzer(); flashKnob(knobEls[current.knob], 'fail'); });
+        if (!setEnable.checked){ applyTarget(); render(); finish(false, true); return; }
+        // still let them reach and set it; reveal if nothing happens
+        clearTimeout(giveUpTimer);
+        giveUpTimer = setTimeout(reveal, setWithin());
+      }
+    }, wait);
+  }
+
+  function issueNext(fromTimer){
+    const now = performance.now();
+    if (!fromTimer && now - lastIssueAt < 400) return;
+    lastIssueAt = now;
+    clearTimers();
+    pttDown = false; pttBtn.classList.remove('tx'); pttBtn.textContent = 'PTT';
+    rbSession++;
+    warmStop();
+    rbAttempted = false; deferredResult = null;
+    rbShow('', '');
+    closeHeld(null);
+    if (pendingFlip){ pendingFlip = false; flipCom(); }
+    setMode(null);
+    drag = null;
+
+    safe(getAudioCtx);
+    const callsign = callsignInput.value.trim() || 'N123AB';
+    current = buildInstruction(callsign);
+    count += 1;
+    countEl.textContent = `INSTRUCTIONS ${count}`;
+
+    if (captionsToggle.checked){
+      readoutEl.textContent = current.display;
+      readoutEl.className = '';
+    } else {
+      readoutEl.textContent = '🔊 listening only';
+      readoutEl.className = 'masked';
+    }
+    pfdHint.textContent = 'Reach for the knob…';
+    const csRow = document.querySelector('.callsign-row');
+    if (csRow && !didFirstScroll){   // only on the first instruction; after that, leave the view alone
+      didFirstScroll = true;
+      const y = csRow.getBoundingClientRect().top + window.scrollY - 6;
+      if (Math.abs(window.scrollY - y) > 4) window.scrollTo(0, Math.max(0, y));
+    }
+
+    phase = 'reach';
+    reachMissed = false;
+    clearKnobFlashes();
+    // provisional clock start = after the callsign would have been spoken (≈0.4 s/word at 1×)
+    const rate = parseFloat(rateSlider.value) || 1;
+    const csWords = current.csSpoken.split(/\s+/).length;
+    instructionStart = performance.now() + (csWords * 400 + 300) / rate;
+    let startLocked = false;
+    lastReach = null;
+    armMissTimer();
+    speak(current.csSpoken, current.instrSpoken, () => {
+      if (phase !== 'reach' || startLocked) return;
+      startLocked = true;
+      instructionStart = performance.now();
+      if (!reachMissed) armMissTimer();
+    });
+  }
+
+  // ---------- READ BACK (speech recognition, push-to-talk) ----------
+  // Tolerant check: the key number + the callsign (last 3 or full). A spoken direction that
+  // contradicts the instruction fails; everything else ("and maintain", facility name…) is ignored.
+  const RB_NATO = {alpha:'a',alfa:'a',bravo:'b',charlie:'c',delta:'d',echo:'e',foxtrot:'f',golf:'g',hotel:'h',
+    india:'i',juliet:'j',juliett:'j',kilo:'k',lima:'l',mike:'m',november:'n',oscar:'o',papa:'p',quebec:'q',
+    romeo:'r',sierra:'s',tango:'t',uniform:'u',victor:'v',whiskey:'w',whisky:'w',xray:'x','x-ray':'x',
+    yankee:'y',zulu:'z',
+    // common recognizer mishearings
+    pop:'p',poppa:'p',pappa:'p',popper:'p',mic:'m',charley:'c',charly:'c',juliette:'j',julia:'j',
+    keylo:'k',leema:'l',sierre:'s',siera:'s',hotels:'h',viktor:'v',yanky:'y',yankees:'y',zooloo:'z',foxtrott:'f',
+    ecko:'e',gulf:'g',romero:'r'};
+  // ordinary readback words: never used as callsign letters in the loose check
+  const RB_PHRASE = new Set(['right','left','heading','turn','turning','climb','climbing','descend','descending','maintain',
+    'maintaining','contact','contacting','center','approach','departure','tower','ground','degrees','degree','thousand',
+    'hundred','point','decimal','dot','and','the','to','for','with','roger','wilco','over','down','up','level','flight','feet']);
+  const RB_FILLER = new Set(['or','uh','um','ah','er','eh','and','a','the']);   // ignored between digits
+  const RB_DIGIT = {zero:'0',one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',
+    niner:'9',tree:'3',fife:'5'};
+  const RB_SOFT = {oh:'0',o:'0',won:'1',when:'1',wun:'1',to:'2',too:'2',for:'4',fore:'4',ate:'8',free:'3'};   // digits only next to digits / NATO words
+  const RB_TEENS = {ten:'10',eleven:'11',twelve:'12',thirteen:'13',fourteen:'14',fifteen:'15',sixteen:'16',
+    seventeen:'17',eighteen:'18',nineteen:'19'};
+  const RB_TENS = {twenty:'2',thirty:'3',forty:'4',fourty:'4',fifty:'5',sixty:'6',seventy:'7',eighty:'8',ninety:'9'};
+  const RB_STOP = new Set(['and','the','to','for','up','oh','on','at','in','is','it','i','a']);
+
+  function rbTokens(text){
+    let t = String(text).toLowerCase()
+      .replace(/(\d),(\d{3})/g, '$1$2')           // 7,000 → 7000
+      .replace(/(\d)\.(\d)/g, '$1 point $2')       // 126.025 → 126 point 025
+      .replace(/x-ray|x ray|\bex ray\b/g, 'xray')
+      .replace(/[^a-z0-9 ]+/g, ' ');
+    const raw = t.split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const w of raw){
+      const m = w.match(/^(\d+)([a-z]+)$/) || w.match(/^([a-z]+)(\d+)$/);   // "3ab" → 3, a, b
+      if (m && !RB_DIGIT[w]){ out.push(m[1]); out.push(m[2]); continue; }
+      // "two thousand, one whiskey papa" → "2001": split a whole thousand + one digit back apart
+      if (/^\d{4,5}$/.test(w) && +w % 1000 > 0 && +w % 1000 < 10){ out.push(String(+w - (+w % 1000))); out.push(String(+w % 1000)); continue; }
+      out.push(w);
+    }
+    return out;
+  }
+  // digit runs (number words → digits, "thousand" → 000) + compact callsign characters
+  function rbParse(text, joinTens, orIsFour){
+    const toks = rbTokens(text);
+    const kind = toks.map(w => /^\d+$/.test(w) || RB_DIGIT[w] || RB_TEENS[w] || RB_TENS[w] ? 'd'
+                         : (w === 'point' || w === 'decimal' || w === 'dot') ? 'p'
+                         : (w === 'thousand' || w === 'hundred') ? 'm'
+                         : (orIsFour && w === 'or') ? 's' : RB_SOFT[w] ? 's' : RB_FILLER.has(w) ? 'f' : 'w');
+    // soft words count as digits only beside a digit
+    const isNato = j => j >= 0 && j < toks.length && !!RB_NATO[toks[j]];
+    for (let i = 0; i < toks.length; i++) if (kind[i] === 's' && (kind[i-1] === 'd' || kind[i+1] === 'd' || isNato(i+1))) kind[i] = 'd';
+    // a filler word between two digits ("nine or five") is skipped; anywhere else it's an ordinary word
+    for (let i = 0; i < toks.length; i++) if (kind[i] === 'f'){
+      let a = i - 1, b = i + 1;
+      while (a >= 0 && kind[a] === 'f') a--;
+      while (b < toks.length && kind[b] === 'f') b++;
+      kind[i] = (kind[a] === 'd' || kind[a] === 's') && (kind[b] === 'd' || kind[b] === 's') ? 'skip' : 'w';
+    }
+    const runs = []; let run = ''; let compact = ''; let loose = '';
+    const flush = () => { if (run) runs.push(run); run = ''; };
+    for (let i = 0; i < toks.length; i++){
+      const w = toks[i];
+      if (kind[i] === 'd'){
+        let d;
+        if (/^\d+$/.test(w)) d = w;
+        else if (RB_TEENS[w]) d = RB_TEENS[w];
+        else if (RB_TENS[w]){ const nx = toks[i+1]; if (joinTens && nx && RB_DIGIT[nx] && RB_DIGIT[nx] !== '0'){ d = RB_TENS[w] + RB_DIGIT[nx]; i++; } else d = RB_TENS[w] + '0'; }
+        else d = RB_DIGIT[w] || RB_SOFT[w] || (w === 'or' ? '4' : '');
+        run += d; compact += d; loose += d;
+      } else if (kind[i] === 'p' || kind[i] === 'skip'){ /* stay in the run */ }
+      else if (kind[i] === 'm'){ if (run) { run += (w === 'thousand' ? '000' : '00'); compact += (w === 'thousand' ? '000' : '00'); } }
+      else {
+        flush();
+        if (RB_NATO[w]) loose += RB_NATO[w];
+        else if (/^[a-z]+$/.test(w) && !RB_PHRASE.has(w) && !RB_FILLER.has(w)) loose += w[0];   // garbled word → its first letter
+        if (RB_NATO[w]) compact += RB_NATO[w];
+        else if (w.length <= 3 && /^[a-z]+$/.test(w) && !RB_STOP.has(w)) compact += w;   // "ab" spoken as letters
+        else if (w.length === 1 && w !== 'a' && w !== 'i') compact += w;
+        else compact += '|';
+      }
+    }
+    flush();
+    return {runs, compact, loose, words: toks};
+  }
+  // "two eighty three alpha bravo" = 283 or 280 + "3AB": try both readings, pass if either does
+  function readbackCheck(text, instr, callsignRaw){
+    const a = readbackCheck1(rbParse(text, true, false), text, instr, callsignRaw);
+    if (a.ok) return a;
+    for (const [jt, of] of [[false, false], [true, true], [false, true]]){   // other readings: 280+"3AB", "or" = four
+      const r = readbackCheck1(rbParse(text, jt, of), text, instr, callsignRaw);
+      if (r.ok) return r;
+    }
+    return a;
+  }
+  function readbackCheck1(P, text, instr, callsignRaw){
+    const cs = callsignRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // in-order count of callsign-suffix characters found in s
+    const inOrder = (sfx, str) => { let n = 0, j = 0; for (const ch of sfx){ const k = str.indexOf(ch, j); if (k >= 0){ n++; j = k + 1; } } return n; };
+    const sfx = cs.slice(-3);
+    const csStrict = cs.length > 0 && (P.compact.includes(cs) || P.compact.includes(sfx));
+    let csOk = csStrict;   // lenient check below, once the instruction's number is known
+    let num, numAlt = null, dir = null;
+    if (/^turn(Left|Right)Hdg$/.test(instr.type)){ num = hdgLabel(instr.target); dir = /Left/.test(instr.type) ? 'left' : 'right'; numAlt = String(+num); }
+    else if (/^turn(Left|Right)Deg$/.test(instr.type)){ num = (instr.display.match(/(\d+) degrees/) || [])[1]; dir = /Left/.test(instr.type) ? 'left' : 'right'; }
+    else if (instr.type === 'climb' || instr.type === 'descend'){ num = String(instr.target); }
+    else {
+      const core = (String(instr.target.mhz) + pad3(instr.target.khz)).replace(/0+$/, '');
+      num = core.slice(1);   // leading "1" optional: 26025 or 126025 both contain it
+    }
+    const numOk = !!num && P.runs.some(r => r.includes(num) || (numAlt && numAlt.length >= 2 && r === numAlt));
+    if (!csOk && sfx.length >= 2 && num){
+      // lenient: 2 of the last 3 callsign characters, in order — not counting the heading/altitude/frequency digits
+      const strip = str => str.replace(new RegExp((instr.type === 'contact' ? '1?' : '') + num), '');
+      csOk = inOrder(sfx, strip(P.compact)) >= 2 || inOrder(sfx, strip(P.loose)) >= 2;
+    }
+    const saidLeft = P.words.includes('left'), saidRight = P.words.some(w => w === 'right' || w === 'write' || w === 'rite');
+    const wrongDir = dir && ((dir === 'left' && saidRight && !saidLeft) || (dir === 'right' && saidLeft && !saidRight));
+    const missing = [];
+    if (!numOk) missing.push(/Hdg$/.test(instr.type) ? 'heading ' + num
+                           : /Deg$/.test(instr.type) ? num + '°'
+                           : (instr.type === 'climb' || instr.type === 'descend') ? 'altitude ' + num : 'frequency');
+    if (!csOk) missing.push('callsign');
+    if (wrongDir) missing.push('wrong direction');
+    return {ok: numOk && csOk && !wrongDir, missing, heard: text};
+  }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rbEnable = $('rbEnable'), pttBtn = $('pttBtn'), rbResult = $('rbResult'), hintLine = $('hintLine');
+  if (!SR){
+    rbEnable.checked = false; rbEnable.disabled = true;
+    $('rbLabelText').textContent = 'Enable READ BACK (not available in this browser)';
+  }
+  function syncRb(){
+    pttBtn.hidden = !rbEnable.checked;
+    hintLine.textContent = rbEnable.checked
+      ? 'Space: tap = next instruction, hold = PTT · Enter = next instruction too.'
+      : 'Space or Enter also works — keep one hand on the yoke.';
+    if (!rbEnable.checked){ rbShow('', ''); warmStop(); }
+  }
+  rbEnable.addEventListener('change', () => { syncRb(); rbEnable.blur(); });   // so Space/Enter go to the app right away
+  function rbShow(text, cls){ rbResult.textContent = text; rbResult.className = 'rb-result' + (cls ? ' ' + cls : ''); }
+  function rbExample(instr, callsignRaw){
+    const sfx = callsignRaw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-3);
+    if (/Hdg$/.test(instr.type)) return (/Left/.test(instr.type) ? 'left ' : 'right ') + hdgLabel(instr.target) + ', ' + sfx;
+    if (/Deg$/.test(instr.type)) return (/Left/.test(instr.type) ? 'left ' : 'right ') + (instr.display.match(/(\d+) degrees/) || [])[1] + ', ' + sfx;
+    if (instr.type === 'climb' || instr.type === 'descend') return instr.target + ', ' + sfx;
+    return spokenFreqStr(instr.target) + ', ' + sfx;
+  }
+
+  // Recognition is kept "warm": the session opens on the knob tap (a user gesture) so it is already
+  // listening when PTT is pressed. Only results that arrive after the press count. On release we keep
+  // listening briefly (up to RB_TAIL_MS) so the last words are finalized before scoring.
+  const RB_TAIL_MS = 1500, RB_TAIL_MIN_MS = 500;
+  let rec = null, recRunning = false, wantWarm = false, rbSession = 0;
+  let archive = [], curResults = [];          // results from ended sessions + the live one
+  let pttDown = false, pttStartIdx = 0, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
+  const allResults = () => archive.concat(curResults);
+  let warmAfterSpeech = false;
+  function warmStart(){
+    if (!rbEnable.checked || !SR) return;
+    wantWarm = true;
+    if (recRunning) return;
+    // opening the mic while ATC is talking cuts the instruction off — wait until ATC finishes
+    if (window.speechSynthesis && speechSynthesis.speaking){ warmAfterSpeech = true; return; }
+    let r;
+    try { r = new SR(); } catch (e) { return; }
+    rec = r; recRunning = true; gotStart = false; lastErr = null;
+    r.lang = 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 5;
+    r.onstart = () => { gotStart = true; if (pttDown) pttBtn.textContent = '● TX'; };
+    r.onresult = (ev) => {
+      if (rec !== r) return;
+      curResults = Array.from(ev.results).map(x => ({alts: Array.from(x).map(a => a.transcript), final: x.isFinal}));
+      if (collecting) maybeFinish(false);
+    };
+    r.onerror = (ev) => { lastErr = ev.error; };
+    r.onend = () => {
+      if (rec !== r) return;
+      recRunning = false;
+      archive = archive.concat(curResults.map(x => ({alts: x.alts, final: true}))); curResults = [];   // keep positions stable
+      if (collecting){ maybeFinish(true); return; }
+      if (lastErr === 'not-allowed' || lastErr === 'service-not-allowed'){
+        wantWarm = false;
+        if (pttDown) { pttDown = false; pttBtn.classList.remove('tx'); pttBtn.textContent = 'PTT'; }
+        rbShow('Microphone blocked — allow it for this site, then try again.', 'bad');
+        return;
+      }
+      if (wantWarm) setTimeout(() => { if (wantWarm && !recRunning) warmStart(); }, 250);   // Chrome ends sessions on silence
+    };
+    try { r.start(); } catch (e) { recRunning = false; }
+  }
+  function onAtcDone(){   // called when the instruction finishes speaking
+    if (warmAfterSpeech){ warmAfterSpeech = false; if (wantWarm) setTimeout(warmStart, 150); }
+  }
+  function warmStop(){
+    wantWarm = false; warmAfterSpeech = false; collecting = false; clearTimeout(tailTimer);
+    if (rec){ const r = rec; rec = null; recRunning = false; try { r.abort(); } catch (e) {} }
+    archive = []; curResults = [];
+  }
+  function pttStart(fromIdx){
+    if (!rbEnable.checked || !SR || pttDown) return;
+    if (!current){ rbShow('Get an instruction first.', 'info'); return; }
+    if (window.speechSynthesis && speechSynthesis.speaking){ rbShow('Wait for ATC to finish…', 'info'); return; }
+    if (collecting){ collecting = false; clearTimeout(tailTimer); }
+    pttDown = true;
+    clearTimeout(continuousTimer);   // never move on while the pilot is talking
+    rbShow('', '');
+    // everything heard before the press (incl. a phrase still in progress: ATC voice / noise) is skipped
+    pttStartIdx = (typeof fromIdx === 'number') ? Math.min(fromIdx, allResults().length) : allResults().length;
+    pttBtn.classList.add('tx');
+    pttBtn.textContent = (recRunning && gotStart) ? '● TX' : '● …';
+    if (!recRunning){ warmAfterSpeech = false; warmStart(); }
+  }
+  function pttEnd(){
+    if (!pttDown) return;
+    pttDown = false;
+    pttBtn.classList.remove('tx'); pttBtn.textContent = '…';
+    collecting = true;
+    const t0 = performance.now();
+    const session = rbSession;
+    clearTimeout(tailTimer);
+    // finish when the last phrase is final (after a short minimum), or at the tail limit
+    const poll = () => {
+      if (!collecting || session !== rbSession) return;
+      const el = performance.now() - t0;
+      if (el >= RB_TAIL_MS) return maybeFinish(true);
+      if (el >= RB_TAIL_MIN_MS) maybeFinish(false);
+      if (collecting) tailTimer = setTimeout(poll, 100);
+    };
+    tailTimer = setTimeout(poll, 100);
+  }
+  function maybeFinish(force){
+    if (!collecting) return;
+    const res = allResults().slice(pttStartIdx);
+    const settled = res.length > 0 && res.every(x => x.final);
+    if (!force && !settled) return;
+    collecting = false; clearTimeout(tailTimer);
+    pttBtn.textContent = 'PTT';
+    finishReadback(res.map(x => x.alts), lastErr);
+  }
+  function finishReadback(results, err){
+    if (!current) return;
+    rbAttempted = true;
+    if (phase === 'done') scheduleContinuous(contDelayMs());   // the delay runs from the end of the readback
+    if (deferredResult !== null){ const ok = deferredResult; deferredResult = null; showResult(ok); }
+    if (!results.length){ rbShow(err === 'network' ? 'Speech service unreachable (needs internet).' : "Didn't hear anything — hold PTT while you speak.", 'info'); return; }
+    const callsign = callsignInput.value.trim() || 'N123AB';
+    const base = results.map(r => r[0]).join(' ');
+    const cands = [base];
+    results.forEach((r, i) => r.slice(1).forEach(alt => cands.push(results.map((rr, j) => j === i ? alt : rr[0]).join(' '))));
+    let res = null;
+    for (const c of cands){ const r = readbackCheck(c, current, callsign); if (r.ok){ res = r; break; } if (!res) res = r; }
+    if (res.ok){
+      safe(playDing);
+      rbShow('✓ Read back: “' + res.heard.trim() + '”', 'ok');
+      warmStop();                       // done with this call — mic off until the next knob tap
+    } else {
+      safe(playBuzzer);
+      rbShow('✗ Heard “' + base.trim() + '” — missing ' + res.missing.join(', ') + ' (e.g. ' + rbExample(current, callsign) + ')', 'bad');
+      // stay warm for another try
+    }
+  }
+  pttBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); try { pttBtn.setPointerCapture(e.pointerId); } catch (x) {} pttStart(); });
+  pttBtn.addEventListener('pointerup', pttEnd);
+  pttBtn.addEventListener('pointercancel', pttEnd);
+  pttBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+  const SPACE_HOLD_MS = 250;
+  let spaceTimer = null, spaceHold = false;
+  document.addEventListener('keyup', (e) => {
+    if (e.code !== 'Space' || !rbEnable.checked) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (spaceTimer){                       // short tap → next instruction
+      clearTimeout(spaceTimer); spaceTimer = null;
+      if (phase !== 'set') issueNext(false);
+      return;
+    }
+    if (spaceHold){ spaceHold = false; pttEnd(); }
+  });
+  syncRb();
+
+  btn.addEventListener('click', () => issueNext(false));
+  function syncSetEnable(){
+    setThresholdInput.disabled = !setEnable.checked;
+    if (phase === 'idle' || phase === 'done')
+      pfdHint.textContent = setEnable.checked
+        ? 'After an instruction: tap the correct knob, then dial it in.'
+        : 'SET step off — just reach for the right knob; the PFD follows.';
+  }
+  setEnable.addEventListener('change', syncSetEnable);
+  continuousToggle.addEventListener('change', () => {
+    if (!continuousToggle.checked) clearTimeout(continuousTimer);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.code === 'Space' && rbEnable.checked){
+      if (e.target.tagName === 'BUTTON' && e.target !== btn && e.target !== pttBtn) return;
+      e.preventDefault();
+      if (e.repeat || spaceTimer || spaceHold) return;
+      // tap = next instruction, hold = PTT; a hold is measured from the key-down so no words are lost
+      const idx = allResults().length;
+      spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(idx); }, SPACE_HOLD_MS);
+      return;
+    }
+    if ((phase === 'set' && current.knob === 'com') || kpHold){
+      const map = {Backspace:'BKSP', Delete:'BKSP', Enter:'ENT', NumpadEnter:'ENT', Period:'.', NumpadDecimal:'.'};
+      const k = /^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : map[e.code];
+      if (k){ e.preventDefault(); keypadPress(k); return; }
+    }
+    if (phase === 'set' && /^Arrow/.test(e.code)){
+      e.preventDefault();
+      const dir = (e.code === 'ArrowUp' || e.code === 'ArrowRight') ? 1 : -1;
+      const mode = current.knob;
+      if (mode === 'hdg') nudge('hdg', dir, e.shiftKey ? 1 : DETENT.hdg);
+      else if (mode === 'alt') nudge('alt', dir, e.shiftKey ? 100 : DETENT.alt);
+      else nudge(e.shiftKey ? 'khz' : 'mhz', dir);
+      return;
+    }
+    if (e.repeat) return;
+    if (e.code === 'Space' || e.code === 'Enter'){
+      if (e.target.tagName === 'BUTTON' && e.target !== btn) return; // let share button work
+      e.preventDefault();
+      if (phase === 'set') return; // don't skip away mid-dial by accident
+      issueNext(false);
+    }
+  });
+
+  // ---------- callsign / rate ----------
+  try {
+    const savedCallsign = localStorage.getItem('atc-callsign');
+    if (savedCallsign) callsignInput.value = savedCallsign;
+  } catch (err) { /* storage unavailable — just skip persistence */ }
+  callsignInput.addEventListener('input', () => {
+    try { localStorage.setItem('atc-callsign', callsignInput.value.trim()); }
+    catch (err) { /* storage unavailable — just skip persistence */ }
+  });
+  // v3.12 voice & radio controls
+  const fmtV = { rate:v => (+v).toFixed(2) + '×', pitch:v => (+v).toFixed(2), vol:v => Math.round(v*100) + '%', noise:v => Math.round(v*100) + '%' };
+  const presetBtns = [...document.querySelectorAll('#voiceSet [data-rate]')];
+  function markPreset(){ presetBtns.forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.rate - +rateSlider.value) < 0.001)); }
+  [['rate', rateSlider, rateValue], ['pitch', pitchSlider, $('pitchValue')], ['vol', volSlider, $('volValue')], ['noise', noiseSlider, $('noiseValue')]].forEach(([k, el, out]) => {
+    if (VPREFS[k] !== undefined && isFinite(VPREFS[k])) el.value = VPREFS[k];
+    out.textContent = fmtV[k](el.value);
+    el.addEventListener('input', () => {
+      out.textContent = fmtV[k](el.value);
+      if (k === 'rate') markPreset();
+      if (k === 'noise' && window.speechSynthesis && speechSynthesis.speaking && ensureRadio() && RADIO.bed)
+        RADIO.bed.gain.setTargetAtTime(el.value * 0.6, audioCtx.currentTime, 0.02);
+    });
+    el.addEventListener('change', saveVoicePrefs);
+  });
+  markPreset();
+  presetBtns.forEach(b => b.addEventListener('click', () => {
+    rateSlider.value = b.dataset.rate; rateValue.textContent = fmtV.rate(b.dataset.rate); markPreset(); saveVoicePrefs();
+  }));
+  if (VPREFS.squelch !== undefined) squelchToggle.checked = !!VPREFS.squelch;
+  squelchToggle.addEventListener('change', saveVoicePrefs);
+  voiceSelect.addEventListener('change', saveVoicePrefs);
+  $('sampleBtn').addEventListener('click', () => {
+    if ('speechSynthesis' in window && !voices.length) loadVoices();
+    speakSample();
+  });
+
+  // ---------- start ----------
+  initAircraft();
+  buildStatic();
+  render();
+  requestAnimationFrame(tick);
+
+})();
+
+// ---- share button (App-Conventions §6a) ----
+(() => {
+  const APP_URL   = 'https://atc-chair-fly-trainer.netlify.app/';
+  const APP_TITLE = 'ATC Chair-Fly Trainer';
+  const APP_TEXT  = 'A voice ATC chair-flying trainer for GA pilots — Listen, Set, Read Back.';
+  const btn = document.getElementById('shareBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const label = btn.querySelector('span') || btn;
+    const original = label.textContent;
+    if (navigator.share){
+      try { await navigator.share({ title: APP_TITLE, text: APP_TEXT, url: APP_URL }); return; }
+      catch (err) { if (err && err.name === 'AbortError') return; /* else fall through */ }
+    }
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+      label.textContent = 'Link copied to clipboard!';
+      setTimeout(() => { label.textContent = original; }, 2200);
+    } catch (err) {
+      window.location.href = 'mailto:?subject=' + encodeURIComponent(APP_TITLE)
+        + '&body=' + encodeURIComponent(APP_TEXT + ' ' + APP_URL);
+    }
+  });
+})();
+
+// ---- open counter (App-Conventions §6b, Tally) ----
+fetch('https://tally.yuki.sh/hits/wamware/atc-chair-fly-trainer.json')
+  .then(r => r.json())
+  .then(d => {
+    const el = document.getElementById('hitCounter');
+    const n = d && d.visit;
+    if (el && typeof n === 'number') el.textContent = 'Opened ' + n.toLocaleString() + (n === 1 ? ' time' : ' times');
+  })
+  .catch(() => { /* counter is a nice-to-have, never block the app */ });
+</script>
+
+
+</body>
+</html>
