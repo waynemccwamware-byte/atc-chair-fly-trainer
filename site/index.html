@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.19</span>
+      <span class="ver mono">v3.20</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -2261,7 +2261,8 @@
   // Recognition is kept "warm": the session opens on the knob tap (a user gesture) so it is already
   // listening when PTT is pressed. Only results that arrive after the press count. On release we keep
   // listening briefly (up to RB_TAIL_MS) so the last words are finalized before scoring.
-  const RB_TAIL_MS = 1500, RB_TAIL_MIN_MS = 500;
+  const RB_TAIL_MS = 2500, RB_TAIL_MIN_MS = 500, RB_QUIET_MS = 1000;   // v3.20: score only after a quiet gap
+  let lastResAt = 0, pttRelAt = 0, resAfter = [];
   let rec = null, recRunning = false, wantWarm = false, rbSession = 0;
   let archive = [], curResults = [];          // results from ended sessions + the live one
   let pttSessAge = null, pttBefore = '';
@@ -2285,8 +2286,9 @@
     r.onresult = (ev) => {
       if (rec !== r) return;
       if (!sessHeard){ sessHeard = true; sev('heard'); }
+      lastResAt = performance.now();
+      if (pttDown || collecting) resAfter.push(Math.round(lastResAt - pttT0));
       curResults = Array.from(ev.results).map(x => ({alts: Array.from(x).map(a => a.transcript), final: x.isFinal}));
-      if (collecting) maybeFinish(false);
     };
     r.onerror = (ev) => { lastErr = ev.error; sev('err:' + ev.error); };
     r.onend = () => {
@@ -2347,6 +2349,7 @@
     const sn = snap || pressSnapshot();
     pttStartIdx = Math.min(sn.idx, allResults().length); pttPrefix = sn.prefix;
     pttWarm = sn.warm; pttT0 = sn.t0 || performance.now(); pttColdMs = null;
+    resAfter = [];
     pttSessAge = recRunning && gotStart ? Math.round(pttT0 - sessStartAt) : null;
     pttBefore = allResults().slice(Math.max(0, sn.idx - 2), sn.idx).map(x => x.alts[0]).join(' | ');
     pttBtn.classList.add('tx');
@@ -2355,7 +2358,7 @@
   }
   function pttEnd(){
     if (!pttDown) return;
-    pttDown = false;
+    pttDown = false; pttRelAt = performance.now();
     pttBtn.classList.remove('tx'); pttBtn.textContent = '…';
     collecting = true;
     const t0 = performance.now();
@@ -2375,7 +2378,9 @@
     if (!collecting) return;
     const res = stripPressPrefix(allResults().slice(pttStartIdx));
     const settled = res.length > 0 && res.every(x => x.final);
-    if (!force && !settled) return;
+    // v3.20: a final phrase isn't the end of the readback. Chrome can close "four thousand one" before
+    // "whiskey papa" shows up at all, so also wait for RB_QUIET_MS with no new result.
+    if (!force && (!settled || performance.now() - lastResAt < RB_QUIET_MS)) return;
     collecting = false; clearTimeout(tailTimer);
     pttBtn.textContent = 'PTT';
     finishReadback(res.map(x => x.alts), lastErr);
@@ -2409,7 +2414,8 @@
       changes, readings: cands.length, ptt: pttVia, mic: pttWarm ? 'warm' : 'cold', coldMs: pttWarm ? undefined : pttColdMs, pre: pttPrefix || undefined,
       sessAgeMs: pttSessAge === null ? undefined : pttSessAge, before: pttBefore || undefined, heardAs: (RBX.on() ? imp : legacy).heardAs || undefined,
       events: sessEv.filter(x => x.t >= pttT0 - 10000).map(x => x.e + '@' + Math.round(x.t - pttT0)).join(' '),
-      relMs: Math.round(performance.now() - pttT0) });
+      relMs: pttRelAt ? Math.round(pttRelAt - pttT0) : undefined, scoredMs: Math.round(performance.now() - pttT0),
+      resMs: resAfter.slice(0, 30).join(' ') });
     const useNew = RBX.on();
     const res = useNew ? imp : legacy;
     if (res.ok){
