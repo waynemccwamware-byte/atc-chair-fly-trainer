@@ -441,6 +441,13 @@
     .avio-card .cap{display:none;}
     .callsign-row{margin-bottom:8px;}
   }
+/* GGP-READBACK CSS v1 · App Conventions §14 (same block in every app that grades spoken readbacks) */
+#rbxSet .rbx-chk{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-primary); margin:2px 0 4px; cursor:pointer; }
+#rbxSet .rbx-hint{ font-size:11.5px; color:var(--text-muted); line-height:1.45; margin:4px 0 6px; }
+#rbxSet .rbx-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:4px 0; font-size:11.5px; color:var(--text-muted); }
+.rbx-flag{ margin-left:8px; font-size:11px !important; padding:3px 9px !important; vertical-align:middle; }
+.rbx-note{ color:var(--teal); }
+/* GGP-READBACK CSS END */
 </style>
 <!-- GGP-FOOTER-CSS START v1.1 · 20-Oct-2026 · shared footer styles, App Conventions §5b · master: Control Panel repo tools/ggp-footer -->
 <style>
@@ -489,7 +496,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.13</span>
+      <span class="ver mono">v3.14</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -763,6 +770,7 @@
           <div style="margin-top:8px"><button class="vbtn" type="button" id="sampleBtn">&#9654; Play sample</button></div>
           <p class="vhint">Static plays under the voice; the browser's voice itself can't be filtered to sound like a radio. Saved on this device.</p>
         </details>
+        <div id="rbxHost"></div>
       </div>
 
 </div>
@@ -1847,6 +1855,200 @@
     });
   }
 
+  /* GGP-READBACK START v1 · 20-Oct-2026 · shared readback helper, App Conventions §14 · master: Clearance Delivery site/index.html
+     Copy this block unchanged between apps. It does three things:
+     1. candidates(): every reading of a transmission built from the browser's alternate hearings (maxAlternatives).
+     2. normalize(): sound-alike repair before grading: words that sound like a NATO letter ("pop" → papa,
+        "mic" → mike) and word runs that sound like an expected fix or place name ("twang" → kwang).
+     3. A readback log on this device (localStorage), holding both the old and the new verdict for every
+        spoken readback, with Download / Clear and an "I said it right" flag. Nothing leaves the device.
+     The "Improved readback matching" checkbox (on by default) picks which verdict grades the readback;
+     off = grading exactly as before this block existed. */
+  const RBX = (() => {
+    const VER = 'rbx-v1';
+    const K_ON = 'ggp.rbx.on', K_LOG = 'ggp.rbx.log.v1', MAX_LOG = 300;
+    const NATO_W = ['alpha','bravo','charlie','delta','echo','foxtrot','golf','hotel','india','juliett','kilo','lima','mike',
+      'november','oscar','papa','quebec','romeo','sierra','tango','uniform','victor','whiskey','xray','yankee','zulu'];
+    const NATO_SET = new Set(NATO_W.concat(['alfa','juliet','whisky']));
+    // Ordinary readback / English words: never re-read as a NATO letter or a fix name.
+    const KEEP = new Set(('right left heading turn turning climb climbing descend descending maintain maintaining contact contacting '
+      + 'center centre approach departure tower ground clearance delivery degrees degree thousand hundred point decimal dot '
+      + 'and the to too two for four fore with roger wilco over level flight feet foot cleared clear via radar vector vectors '
+      + 'then direct expect expecting minutes minute after frequency squawk squawking as filed field airport call sign callsign '
+      + 'say again read back ready copy request route tech tec void if not off by advise time released release intentions of '
+      + 'at or below above vfr ifr information on in is it i a an up down standby unable negative affirmative good day '
+      + 'thanks thank you end ask be see sea we he me my our your this that there here what when won one wun oh zero niner nine '
+      + 'tree three fife five six seven eight ate ten twenty thirty forty fifty sixty seventy eighty ninety all ah uh um er '
+      + 'santa san los las el la new north south east west lake fort port saint mount mountain airfield regional county '
+      + 'international municipal executive').split(/\s+/));
+
+    /* Sound-alike key (a small Metaphone-style reduction): spelling variants that sound alike get the same key. */
+    function phon(w){
+      let s = String(w).toLowerCase().replace(/[^a-z]/g, '');
+      if (!s) return '';
+      s = s.replace(/^(kn|gn|pn|wr)/, m => m[1]).replace(/^wh/, 'w');
+      s = s.replace(/tch/g, 'X').replace(/sch/g, 'SK').replace(/ch/g, 'X').replace(/sh/g, 'X').replace(/ph/g, 'F')
+           .replace(/th/g, '0').replace(/dg/g, 'J').replace(/gh/g, '').replace(/ck/g, 'K').replace(/qu/g, 'KW')
+           .replace(/q/g, 'K').replace(/c(?=[eiy])/g, 'S').replace(/c/g, 'K').replace(/g(?=[eiy])/g, 'J')
+           .replace(/x/g, 'KS').replace(/z/g, 'S');
+      const first = /[aeiou]/.test(s[0]) ? 'A' : '';
+      let body = first ? s.slice(1) : s;
+      body = body.replace(/w(?![aeiou])/g, '').replace(/h(?![aeiou])/g, '').replace(/(?!^)y/g, '').replace(/[aeiou]/g, '');
+      return (first + body).toUpperCase().replace(/(.)\1+/g, '$1');
+    }
+    function lev(a, b){
+      if (a === b) return 0; const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+      let prev = Array.from({length:n+1}, (_, j) => j);
+      for (let i = 1; i <= m; i++){ const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); prev = cur; }
+      return prev[n];
+    }
+    // k = heard key, target = wanted key; hl/tl = letters heard/wanted. Short keys must match exactly; a key of 3
+    // may be one sound off only for a word of 6+ letters (b/v: "gabiota" = GAVIOTA); 4+ one off; 8+ two off.
+    // The heard letters must be 60–160% of the wanted, so a short word ("get") never stands in for a long name.
+    function near(k, target, hl, tl){
+      if (!k || !target) return false;
+      if (hl && tl && (hl < tl * 0.6 || hl > tl * 1.6)) return false;
+      const tol = target.length >= 8 ? 2 : target.length >= 4 ? 1 : (target.length === 3 && tl >= 6) ? 1 : 0;
+      return tol ? lev(k, target) <= tol : k === target;
+    }
+    const NATO_KEYS = NATO_W.map(w => [phon(w), w, w.length]);
+
+    /* Every reading of one transmission. results = [[alt0, alt1, …] per final segment], best first. */
+    function candidates(results, max){
+      max = max || 24;
+      const segs = (results || []).map(r => (Array.isArray(r) ? r : [r]).map(s => String(s || '').trim()).filter(Boolean)).filter(r => r.length);
+      if (!segs.length) return [];
+      const out = [], seen = new Set();
+      const add = s => { const k = s.replace(/\s+/g, ' ').trim(); if (k && !seen.has(k.toLowerCase())){ seen.add(k.toLowerCase()); out.push(k); } };
+      add(segs.map(r => r[0]).join(' '));
+      segs.forEach((r, i) => r.slice(1).forEach(alt => add(segs.map((rr, j) => j === i ? alt : rr[0]).join(' '))));
+      const deepest = Math.max(...segs.map(r => r.length));
+      for (let k = 1; k < deepest; k++) add(segs.map(r => r[Math.min(k, r.length - 1)]).join(' '));
+      return out.slice(0, max);
+    }
+
+    /* Sound-alike repair. targets = [{say:'Gaviota', as:'gaviota'}, …]: expected names in this readback.
+       Returns { text, changes:[['twang','kwang'], …] }. */
+    function normalize(text, targets){
+      const toks = String(text || '').replace(/\b(?:ex|x)[ -]?ray\b/gi, 'xray').split(/\s+/).filter(Boolean);
+      const clean = toks.map(t => t.toLowerCase().replace(/[^a-z0-9.]/g, ''));
+      const isWord = i => /^[a-z]+$/.test(clean[i]);
+      const free = i => isWord(i) && !KEEP.has(clean[i]) && !NATO_SET.has(clean[i]);
+      const out = toks.slice(), done = new Array(toks.length).fill(false), changes = [];
+      const T = (targets || []).map(t => ({ say:String(t.say || '').toLowerCase().trim(), as:String(t.as || t.say || '').toLowerCase().trim() }))
+        .filter(t => t.say && t.as).map(t => ({ ...t, n:t.say.split(/\s+/).length, key:phon(t.say.replace(/\s+/g, '')), len:t.say.replace(/[^a-z]/g, '').length }))
+        .filter(t => t.key.length >= 3);
+      // 1. expected names: runs of up to (name words + 1) heard words that sound like the name
+      for (const t of T){
+        if (clean.some((c, i) => c === t.as || clean.slice(i, i + t.n).join(' ') === t.say)) continue;   // already heard right
+        let hit = null;
+        for (let len = Math.min(3, t.n + 1); len >= 1 && !hit; len--){   // longest run first
+          for (let i = 0; i + len <= toks.length; i++){
+            const idx = Array.from({length:len}, (_, j) => i + j);
+            if (idx.some(j => done[j] || !isWord(j))) continue;
+            if (!idx.some(free)) continue;                       // a run of ordinary words is never a fix
+            const w = idx.map(j => clean[j]).join(''); if (near(phon(w), t.key, w.length, t.len)){ hit = idx; break; }
+          }
+        }
+        if (hit){
+          changes.push([hit.map(j => toks[j]).join(' '), t.as]);
+          out[hit[0]] = t.as; hit.slice(1).forEach(j => { out[j] = ''; });
+          hit.forEach(j => { done[j] = true; });
+        }
+      }
+      // 2. NATO letters: one word, or two words heard for one ("zoo lou", "pa pa")
+      for (let i = 0; i < toks.length; i++){
+        if (done[i] || !free(i)) continue;
+        const one = phon(clean[i]);
+        let m = NATO_KEYS.find(([k, , n]) => near(one, k, clean[i].length, n));
+        if (m){ changes.push([toks[i], m[1]]); out[i] = m[1]; done[i] = true; continue; }
+        if (i + 1 < toks.length && !done[i+1] && free(i+1)){
+          const two = phon(clean[i] + clean[i+1]);
+          m = NATO_KEYS.find(([k, , n]) => k.length >= 2 && near(two, k, (clean[i] + clean[i+1]).length, n));
+          if (m){ changes.push([toks[i] + ' ' + toks[i+1], m[1]]); out[i] = m[1]; out[i+1] = ''; done[i] = done[i+1] = true; i++; }
+        }
+      }
+      return { text: out.filter(Boolean).join(' '), changes };
+    }
+
+    /* ---- switch ---- */
+    function on(){ try { return localStorage.getItem(K_ON) !== '0'; } catch (e) { return true; } }
+    function setOn(v){ try { localStorage.setItem(K_ON, v ? '1' : '0'); } catch (e) {} }
+
+    /* ---- readback log (this device only) ---- */
+    function uaShort(){
+      const u = navigator.userAgent || '';
+      const dev = /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac OS X/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'other';
+      const br = /Edg\//.test(u) ? 'Edge' : /CriOS|Chrome\//.test(u) ? 'Chrome' : /FxiOS|Firefox\//.test(u) ? 'Firefox' : /Safari\//.test(u) ? 'Safari' : 'browser';
+      const v = (u.match(/(?:Chrome|CriOS|Version|Firefox|Edg)\/(\d+)/) || [])[1];
+      return dev + ' ' + br + (v ? ' ' + v : '');
+    }
+    function getLog(){ try { const a = JSON.parse(localStorage.getItem(K_LOG) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+    function putLog(a){ try { localStorage.setItem(K_LOG, JSON.stringify(a.slice(-MAX_LOG))); } catch (e) {} }
+    let listeners = [];
+    const changed = () => listeners.forEach(f => { try { f(); } catch (e) {} });
+    function log(entry){
+      const e = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), t: new Date().toISOString(),
+        ver: VER, ua: uaShort(), on: on(), flagged: false }, entry);
+      if (Array.isArray(e.alts)) e.alts = e.alts.slice(0, 12).map(r => (Array.isArray(r) ? r : [r]).slice(0, 5));
+      const a = getLog(); a.push(e); putLog(a); changed();
+      return e.id;
+    }
+    function flag(id){ const a = getLog(); const e = a.find(x => x.id === id); if (e){ e.flagged = true; putLog(a); changed(); } }
+    function clearLog(){ try { localStorage.removeItem(K_LOG); } catch (e) {} changed(); }
+    function download(app){
+      const a = getLog();
+      const d = new Date(), pad = n => String(n).padStart(2, '0');
+      const name = `${app}-readbacks-${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}.json`;
+      const blob = new Blob([JSON.stringify({ app, exported: d.toISOString(), ver: VER, count: a.length, entries: a }, null, 1)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    function stats(){
+      const a = getLog();
+      return { n: a.length, rescued: a.filter(e => e.improved && e.legacy && e.improved.ok && !e.legacy.ok).length,
+        lost: a.filter(e => e.improved && e.legacy && !e.improved.ok && e.legacy.ok).length, flagged: a.filter(e => e.flagged).length };
+    }
+
+    /* ---- UI ---- */
+    function mount(host, opt){
+      if (!host) return;
+      const app = opt.app, bc = opt.btnClass || '';
+      const d = document.createElement('details');
+      d.className = opt.detailsClass || ''; d.id = 'rbxSet';
+      d.innerHTML = `<summary>Readback recognition</summary>
+        <label class="rbx-chk"><input type="checkbox" id="rbxOn"> Improved readback matching (v1)</label>
+        <p class="rbx-hint">Also checks the browser's other hearings of what you said, and sound-alikes (“pop” = papa, “risky” = whiskey, misheard fix names). Turn it off to grade exactly as before. Either way, every spoken readback is logged on this device with both verdicts.</p>
+        <div class="rbx-row"><span class="rbx-count" id="rbxCount"></span></div>
+        <div class="rbx-row"><button type="button" class="${bc}" data-rbx="dl">Download log</button> <button type="button" class="${bc}" data-rbx="clear">Clear log</button></div>`;
+      host.appendChild(d);
+      const cb = d.querySelector('#rbxOn'), cnt = d.querySelector('#rbxCount');
+      cb.checked = on();
+      cb.addEventListener('change', () => { setOn(cb.checked); cb.blur(); });
+      const paint = () => {
+        const s = stats();
+        cnt.textContent = s.n ? `${s.n} readback${s.n === 1 ? '' : 's'} logged · new matcher passed ${s.rescued} the old one missed`
+          + (s.lost ? `, missed ${s.lost} the old one passed` : '') + (s.flagged ? ` · ${s.flagged} flagged by you` : '')
+          : 'No readbacks logged yet.';
+      };
+      listeners.push(paint); paint();
+      d.querySelector('[data-rbx="dl"]').addEventListener('click', () => download(app));
+      d.querySelector('[data-rbx="clear"]').addEventListener('click', () => { if (confirm('Clear the readback log on this device?')) clearLog(); });
+    }
+    /* "I said it right" button for a missed readback: marks the log entry for review. */
+    function flagButton(id, btnClass){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = (btnClass || '') + ' rbx-flag'; b.textContent = 'I said it right';
+      b.title = 'Marks this readback in the log on this device, for review';
+      b.addEventListener('click', ev => { ev.stopPropagation(); flag(id); b.textContent = 'Flagged ✓'; b.disabled = true; });
+      return b;
+    }
+    return { VER, phon, candidates, normalize, on, setOn, log, flag, getLog, clearLog, download, stats, mount, flagButton, uaShort };
+  })();
+  /* GGP-READBACK END */
+  RBX.mount($('rbxHost'), { app:'atc-chair-fly-trainer', detailsClass:'vset', btnClass:'vbtn' });
+
   // ---------- READ BACK (speech recognition, push-to-talk) ----------
   // Tolerant check: the key number + the callsign (last 3 or full). A spoken direction that
   // contradicts the instruction fails; everything else ("and maintain", facility name…) is ignored.
@@ -2096,15 +2298,34 @@
     const base = results.map(r => r[0]).join(' ');
     const cands = [base];
     results.forEach((r, i) => r.slice(1).forEach(alt => cands.push(results.map((rr, j) => j === i ? alt : rr[0]).join(' '))));
-    let res = null;
-    for (const c of cands){ const r = readbackCheck(c, current, callsign); if (r.ok){ res = r; break; } if (!res) res = r; }
+    let legacy = null;
+    for (const c of cands){ const r = readbackCheck(c, current, callsign); if (r.ok){ legacy = r; break; } if (!legacy) legacy = r; }
+    // v3.14 improved matching (RBX, App Conventions §14): more readings, each also sound-alike repaired
+    let imp = legacy, changes = [];
+    if (!legacy.ok){
+      for (const c of RBX.candidates(results)){
+        const n = RBX.normalize(c, []);
+        for (const t of n.text !== c ? [c, n.text] : [c]){
+          const r = readbackCheck(t, current, callsign);
+          if (r.ok){ imp = r; changes = t === c ? [] : n.changes; break; }
+        }
+        if (imp.ok) break;
+      }
+    }
+    const logId = RBX.log({ app:'atc-chair-fly-trainer', expected: (current.display || '') + ' | ' + callsign, heard: base.trim(), alts: results,
+      legacy:{ ok:legacy.ok, missing:legacy.missing }, improved:{ ok:imp.ok, missing:imp.missing, rescued: imp.ok && !legacy.ok ? legacy.missing : [] },
+      changes, readings: cands.length });
+    const useNew = RBX.on();
+    const res = useNew ? imp : legacy;
     if (res.ok){
       safe(playDing);
-      rbShow('✓ Read back: “' + res.heard.trim() + '”', 'ok');
+      const rescued = useNew && !legacy.ok;
+      rbShow('✓ Read back: “' + res.heard.trim() + '”' + (rescued ? ' · new matcher' + (changes.length ? ' (' + changes.slice(0, 2).map(ch => '“' + ch[0] + '” = ' + ch[1]).join(', ') + ')' : '') : ''), 'ok');
       warmStop();                       // done with this call — mic off until the next knob tap
     } else {
       safe(playBuzzer);
       rbShow('✗ Heard “' + base.trim() + '” — missing ' + res.missing.join(', ') + ' (e.g. ' + rbExample(current, callsign) + ')', 'bad');
+      rbResult.appendChild(RBX.flagButton(logId, 'vbtn'));
       // stay warm for another try
     }
   }
