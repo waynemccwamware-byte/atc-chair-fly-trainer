@@ -448,6 +448,13 @@
 .rbx-flag{ margin-left:8px; font-size:11px !important; padding:3px 9px !important; vertical-align:middle; }
 .rbx-note{ color:var(--teal); }
 /* GGP-READBACK CSS END */
+  /* v3.16 iPhone/iPad: one tap before anything, so ATC's voice is unlocked before the mic ever opens (as Clearance Delivery v0.30) */
+  .tap-start{ position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:24px;
+    background:rgba(16,20,26,.86); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); cursor:pointer; }
+  .tap-start .ts-box{ max-width:320px; width:100%; text-align:center; padding:22px 20px; border:1px solid var(--amber-dim);
+    border-radius:12px; background:var(--bg-panel); box-shadow:0 0 0 1px var(--bezel), 0 10px 30px rgba(0,0,0,.4); }
+  .tap-start .ts-t{ font:600 20px 'IBM Plex Sans', sans-serif; color:var(--amber); }
+  .tap-start .ts-s{ margin-top:8px; font-size:13px; line-height:1.45; color:var(--text-muted); }
 </style>
 <!-- GGP-FOOTER-CSS START v1.1 · 20-Oct-2026 · shared footer styles, App Conventions §5b · master: Control Panel repo tools/ggp-footer -->
 <style>
@@ -496,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.15</span>
+      <span class="ver mono">v3.16</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -1784,6 +1791,37 @@
     u.onerror = () => radioOff(rtok);
     speechSynthesis.speak(u);
   }
+
+  /* v3.16: iPhone/iPad "Tap anywhere to start". iOS drops a page's first speech unless it starts in a tap, and
+     won't start speech while the page records; in Clearance Delivery that left ATC silent after a cold open
+     (fixed there in v0.30, 20-Oct-2026). Here the first tap speaks an audible line, as Play sample does, and
+     starts the radio audio, before the mic is ever used. Shown on each open until a line has actually started. */
+  let speechReady = false;
+  const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function tapToStart(){
+    if (!IS_IOS || !('speechSynthesis' in window) || speechReady || document.querySelector('.tap-start')) return;
+    const ov = document.createElement('div');
+    ov.className = 'tap-start'; ov.setAttribute('role', 'button'); ov.setAttribute('aria-label', 'Tap anywhere to start');
+    ov.innerHTML = '<div class="ts-box"><div class="ts-t">Tap anywhere to start</div><div class="ts-s">iPhone needs one tap before ATC can talk to you. You will hear &ldquo;ATC Chair-Fly, ready.&rdquo;</div></div>';
+    let done = false;
+    const go = e => {
+      if (done) return; done = true;
+      e.preventDefault(); ov.remove();
+      if (!voices.length) loadVoices();
+      try { speechSynthesis.resume(); } catch (_) {}
+      speechSynthesis.cancel();
+      const u = makeUtt('A T C Chair-Fly, ready.', parseFloat(rateSlider.value) || 1);
+      const rtok = radioOn();
+      u.onstart = () => { speechReady = true; };
+      u.onend = () => radioOff(rtok);
+      u.onerror = () => radioOff(rtok);
+      speechSynthesis.speak(u);
+    };
+    ov.addEventListener('touchend', go);
+    ov.addEventListener('click', go);
+    document.body.appendChild(ov);
+  }
+  tapToStart();
 
   function armMissTimer(){
     clearTimeout(missTimer);
