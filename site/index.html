@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.21</span>
+      <span class="ver mono">v3.22</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -2321,6 +2321,22 @@
     };
     try { r.start(); } catch (e) { recRunning = false; }
   }
+  // v3.22: which microphone Chrome is listening on, for the readback log. Chrome's speech recognizer uses the
+  // system default input; with Continuity an iPhone can quietly become it (21-Oct-2026: slow, front-clipped
+  // readbacks). Labels are only readable once the site has mic permission; otherwise logged as unknown.
+  let micLabel = '';
+  function readMic(){
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+      navigator.mediaDevices.enumerateDevices().then(list => {
+        const ins = list.filter(d => d.kind === 'audioinput');
+        const d = ins.find(x => x.deviceId === 'default') || ins[0];
+        micLabel = d && d.label ? d.label.replace(/^Default\s*-\s*/i, '') : '';
+      }).catch(() => {});
+    } catch (e) {}
+  }
+  try { navigator.mediaDevices && navigator.mediaDevices.addEventListener && navigator.mediaDevices.addEventListener('devicechange', readMic); } catch (e) {}
+  readMic();
   function onAtcDone(){   // called when the instruction finishes speaking
     if (warmAfterSpeech){ warmAfterSpeech = false; if (wantWarm) setTimeout(warmStart, 150); return; }
     // v3.18: with READ BACK on, open the mic as soon as ATC finishes, not only after a knob tap. A pilot who
@@ -2357,7 +2373,7 @@
     if (!current){ hushAudio(false); rbShow('Get an instruction first.', 'info'); return; }
     if (window.speechSynthesis && speechSynthesis.speaking){ hushAudio(false); rbShow('Wait for ATC to finish…', 'info'); return; }
     if (collecting){ collecting = false; clearTimeout(tailTimer); }
-    pttDown = true; hushAudio(true);
+    pttDown = true; hushAudio(true); readMic();
     clearTimeout(continuousTimer);   // never move on while the pilot is talking
     rbShow('', '');
     // everything heard before the press (incl. a phrase still in progress: ATC voice / noise) is skipped
@@ -2430,7 +2446,7 @@
       sessAgeMs: pttSessAge === null ? undefined : pttSessAge, before: pttBefore || undefined, heardAs: (RBX.on() ? imp : legacy).heardAs || undefined,
       events: sessEv.filter(x => x.t >= pttT0 - 10000).map(x => x.e + '@' + Math.round(x.t - pttT0)).join(' '),
       relMs: pttRelAt ? Math.round(pttRelAt - pttT0) : undefined, scoredMs: Math.round(performance.now() - pttT0),
-      resMs: resAfter.slice(0, 30).join(' ') });
+      resMs: resAfter.slice(0, 30).join(' '), micDevice: micLabel || 'unknown (label not readable)' });
     const useNew = RBX.on();
     const res = useNew ? imp : legacy;
     if (res.ok){
@@ -2441,6 +2457,7 @@
     } else {
       safe(playBuzzer);
       rbShow('✗ Heard “' + base.trim() + '” — missing ' + res.missing.join(', ') + ' (e.g. ' + rbExample(current, callsign) + ')', 'bad');
+      if (/iphone|ipad/i.test(micLabel)) rbResult.appendChild(document.createTextNode(' · Mic in use: ' + micLabel + ' (Continuity). For best results, set System Settings → Sound → Input to the Mac\u2019s own mic.'));
       rbResult.appendChild(RBX.flagButton(logId, 'vbtn'));
       // stay warm for another try
     }
