@@ -496,7 +496,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.14</span>
+      <span class="ver mono">v3.15</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -1855,7 +1855,7 @@
     });
   }
 
-  /* GGP-READBACK START v1 · 20-Oct-2026 · shared readback helper, App Conventions §14 · master: Clearance Delivery site/index.html
+  /* GGP-READBACK START v1.1 · 20-Oct-2026 · shared readback helper, App Conventions §14 · master: Clearance Delivery site/index.html
      Copy this block unchanged between apps. It does three things:
      1. candidates(): every reading of a transmission built from the browser's alternate hearings (maxAlternatives).
      2. normalize(): sound-alike repair before grading: words that sound like a NATO letter ("pop" → papa,
@@ -1863,18 +1863,20 @@
      3. A readback log on this device (localStorage), holding both the old and the new verdict for every
         spoken readback, with Download / Clear and an "I said it right" flag. Nothing leaves the device.
      The "Improved readback matching" checkbox (on by default) picks which verdict grades the readback;
-     off = grading exactly as before this block existed. */
+     off = grading exactly as before this block existed.
+     v1.1 (20-Oct-2026): NATO-letter repair only next to a digit or a NATO word (callsign context). */
   const RBX = (() => {
-    const VER = 'rbx-v1';
+    const VER = 'rbx-v1.1';
     const K_ON = 'ggp.rbx.on', K_LOG = 'ggp.rbx.log.v1', MAX_LOG = 300;
     const NATO_W = ['alpha','bravo','charlie','delta','echo','foxtrot','golf','hotel','india','juliett','kilo','lima','mike',
       'november','oscar','papa','quebec','romeo','sierra','tango','uniform','victor','whiskey','xray','yankee','zulu'];
     const NATO_SET = new Set(NATO_W.concat(['alfa','juliet','whisky']));
+    const DIGIT_W = new Set('zero oh one wun two three tree four fower five fife six seven eight nine niner ten eleven twelve'.split(' '));
     // Ordinary readback / English words: never re-read as a NATO letter or a fix name.
     const KEEP = new Set(('right left heading turn turning climb climbing descend descending maintain maintaining contact contacting '
       + 'center centre approach departure tower ground clearance delivery degrees degree thousand hundred point decimal dot '
       + 'and the to too two for four fore with roger wilco over level flight feet foot cleared clear via radar vector vectors '
-      + 'then direct expect expecting minutes minute after frequency squawk squawking as filed field airport call sign callsign '
+      + 'then direct expect expecting minutes minute after frequency squawk squawks squawking squak score as filed field airport call sign callsign '
       + 'say again read back ready copy request route tech tec void if not off by advise time released release intentions of '
       + 'at or below above vfr ifr information on in is it i a an up down standby unable negative affirmative good day '
       + 'thanks thank you end ask be see sea we he me my our your this that there here what when won one wun oh zero niner nine '
@@ -1956,16 +1958,23 @@
           hit.forEach(j => { done[j] = true; });
         }
       }
-      // 2. NATO letters: one word, or two words heard for one ("zoo lou", "pa pa")
-      for (let i = 0; i < toks.length; i++){
-        if (done[i] || !free(i)) continue;
-        const one = phon(clean[i]);
-        let m = NATO_KEYS.find(([k, , n]) => near(one, k, clean[i].length, n));
-        if (m){ changes.push([toks[i], m[1]]); out[i] = m[1]; done[i] = true; continue; }
-        if (i + 1 < toks.length && !done[i+1] && free(i+1)){
-          const two = phon(clean[i] + clean[i+1]);
-          m = NATO_KEYS.find(([k, , n]) => k.length >= 2 && near(two, k, (clean[i] + clean[i+1]).length, n));
-          if (m){ changes.push([toks[i] + ' ' + toks[i+1], m[1]]); out[i] = m[1]; out[i+1] = ''; done[i] = done[i+1] = true; i++; }
+      // 2. NATO letters: one word, or two words heard for one ("zoo lou", "pa pa"). v1.1: only in callsign
+      //    context, i.e. next to a digit or a NATO word (repaired ones count), so "radar Factory" stays as heard.
+      const isDigitTok = j => j >= 0 && j < toks.length && (/^\d/.test(clean[j]) || DIGIT_W.has(clean[j]));
+      const isNatoTok = j => j >= 0 && j < toks.length && NATO_SET.has(String(out[j]).toLowerCase());
+      const ctx = (a, b) => isDigitTok(a - 1) || isDigitTok(b + 1) || isNatoTok(a - 1) || isNatoTok(b + 1);
+      for (let changedPass = true; changedPass; ){
+        changedPass = false;
+        for (let i = 0; i < toks.length; i++){
+          if (done[i] || !free(i)) continue;
+          const one = phon(clean[i]);
+          let m = ctx(i, i) && NATO_KEYS.find(([k, , n]) => near(one, k, clean[i].length, n));
+          if (m){ changes.push([toks[i], m[1]]); out[i] = m[1]; done[i] = true; changedPass = true; continue; }
+          if (i + 1 < toks.length && !done[i+1] && free(i+1) && ctx(i, i + 1)){
+            const two = phon(clean[i] + clean[i+1]);
+            m = NATO_KEYS.find(([k, , n]) => k.length >= 2 && near(two, k, (clean[i] + clean[i+1]).length, n));
+            if (m){ changes.push([toks[i] + ' ' + toks[i+1], m[1]]); out[i] = m[1]; out[i+1] = ''; done[i] = done[i+1] = true; changedPass = true; i++; }
+          }
         }
       }
       return { text: out.filter(Boolean).join(' '), changes };
