@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.18</span>
+      <span class="ver mono">v3.19</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -2205,10 +2205,23 @@
       const core = (String(instr.target.mhz) + pad3(instr.target.khz)).replace(/0+$/, '');
       num = core.slice(1);   // leading "1" optional: 26025 or 126025 both contain it
     }
-    const numOk = !!num && P.runs.some(r => r.includes(num) || (numAlt && numAlt.length >= 2 && r === numAlt));
+    let numOk = !!num && P.runs.some(r => r.includes(num) || (numAlt && numAlt.length >= 2 && r === numAlt));
+    let heardAs = null;
+    // v3.19: Chrome often writes "thirty" as "13" (thirty/thirteen). A relative turn is only ever 10/20/30, so
+    // 13 can't be a real readback of anything else.
+    if (!numOk && /Deg$/.test(instr.type) && num === '30' && P.runs.some(r => r.startsWith('13'))){ numOk = true; heardAs = '“13” = 30'; }
+    // v3.19: "one one niner point five two five" written as 1190525: an extra 0 where "point" was. Accepted only
+    // when the kHz part doesn't itself start with 0 (120.025's 0 is real).
+    if (!numOk && instr.type === 'contact'){
+      const kz = pad3(instr.target.khz).replace(/0+$/, '');
+      if (kz && kz[0] !== '0'){
+        const alt = (String(instr.target.mhz) + '0' + kz).slice(1);
+        if (P.runs.some(r => r.includes(alt))){ numOk = true; heardAs = 'extra 0 for “point”'; }
+      }
+    }
     if (!csOk && sfx.length >= 2 && num){
       // lenient: 2 of the last 3 callsign characters, in order — not counting the heading/altitude/frequency digits
-      const strip = str => str.replace(new RegExp((instr.type === 'contact' ? '1?' : '') + num), '');
+      const strip = str => str.replace(new RegExp((instr.type === 'contact' ? '1?' : '') + num), '').replace(heardAs === '“13” = 30' ? /13/ : /(?!)/, '');
       csOk = inOrder(sfx, strip(P.compact)) >= 2 || inOrder(sfx, strip(P.loose)) >= 2;
     }
     const saidLeft = P.words.includes('left'), saidRight = P.words.some(w => w === 'right' || w === 'write' || w === 'rite');
@@ -2219,7 +2232,7 @@
                            : (instr.type === 'climb' || instr.type === 'descend') ? 'altitude ' + num : 'frequency');
     if (!csOk) missing.push('callsign');
     if (wrongDir) missing.push('wrong direction');
-    return {ok: numOk && csOk && !wrongDir, missing, heard: text};
+    return {ok: numOk && csOk && !wrongDir, missing, heard: text, heardAs};
   }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2251,8 +2264,12 @@
   const RB_TAIL_MS = 1500, RB_TAIL_MIN_MS = 500;
   let rec = null, recRunning = false, wantWarm = false, rbSession = 0;
   let archive = [], curResults = [];          // results from ended sessions + the live one
+  let pttSessAge = null, pttBefore = '';
   let pttDown = false, pttVia = '', pttStartIdx = 0, pttPrefix = '', pttWarm = false, pttT0 = 0, pttColdMs = null, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
   const allResults = () => archive.concat(curResults);
+  // v3.19 diagnostics: recognizer session events (start / end / error / first result), kept briefly for the log
+  let sessEv = [], sessStartAt = 0, sessHeard = false;
+  const sev = (e) => { const t = performance.now(); sessEv.push({e, t}); if (sessEv.length > 40) sessEv = sessEv.slice(-40); };
   let warmAfterSpeech = false;
   function warmStart(){
     if (!rbEnable.checked || !SR) return;
@@ -2264,15 +2281,17 @@
     try { r = new SR(); } catch (e) { return; }
     rec = r; recRunning = true; gotStart = false; lastErr = null;
     r.lang = 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 5;
-    r.onstart = () => { gotStart = true; if ((pttDown || collecting) && !pttWarm && pttColdMs === null) pttColdMs = Math.round(performance.now() - pttT0); if (pttDown) pttBtn.textContent = '● TX'; };
+    r.onstart = () => { sev('start'); sessStartAt = performance.now(); sessHeard = false; gotStart = true; if ((pttDown || collecting) && !pttWarm && pttColdMs === null) pttColdMs = Math.round(performance.now() - pttT0); if (pttDown) pttBtn.textContent = '● TX'; };
     r.onresult = (ev) => {
       if (rec !== r) return;
+      if (!sessHeard){ sessHeard = true; sev('heard'); }
       curResults = Array.from(ev.results).map(x => ({alts: Array.from(x).map(a => a.transcript), final: x.isFinal}));
       if (collecting) maybeFinish(false);
     };
-    r.onerror = (ev) => { lastErr = ev.error; };
+    r.onerror = (ev) => { lastErr = ev.error; sev('err:' + ev.error); };
     r.onend = () => {
       if (rec !== r) return;
+      sev('end');
       recRunning = false;
       archive = archive.concat(curResults.map(x => ({alts: x.alts, final: true}))); curResults = [];   // keep positions stable
       if (collecting){ maybeFinish(true); return; }
@@ -2328,6 +2347,8 @@
     const sn = snap || pressSnapshot();
     pttStartIdx = Math.min(sn.idx, allResults().length); pttPrefix = sn.prefix;
     pttWarm = sn.warm; pttT0 = sn.t0 || performance.now(); pttColdMs = null;
+    pttSessAge = recRunning && gotStart ? Math.round(pttT0 - sessStartAt) : null;
+    pttBefore = allResults().slice(Math.max(0, sn.idx - 2), sn.idx).map(x => x.alts[0]).join(' | ');
     pttBtn.classList.add('tx');
     pttBtn.textContent = (recRunning && gotStart) ? '● TX' : '● …';
     if (!recRunning){ warmAfterSpeech = false; warmStart(); }
@@ -2385,13 +2406,16 @@
     }
     const logId = RBX.log({ app:'atc-chair-fly-trainer', expected: (current.display || '') + ' | ' + callsign, heard: base.trim(), alts: results,
       legacy:{ ok:legacy.ok, missing:legacy.missing }, improved:{ ok:imp.ok, missing:imp.missing, rescued: imp.ok && !legacy.ok ? legacy.missing : [] },
-      changes, readings: cands.length, ptt: pttVia, mic: pttWarm ? 'warm' : 'cold', coldMs: pttWarm ? undefined : pttColdMs, pre: pttPrefix || undefined });
+      changes, readings: cands.length, ptt: pttVia, mic: pttWarm ? 'warm' : 'cold', coldMs: pttWarm ? undefined : pttColdMs, pre: pttPrefix || undefined,
+      sessAgeMs: pttSessAge === null ? undefined : pttSessAge, before: pttBefore || undefined, heardAs: (RBX.on() ? imp : legacy).heardAs || undefined,
+      events: sessEv.filter(x => x.t >= pttT0 - 10000).map(x => x.e + '@' + Math.round(x.t - pttT0)).join(' '),
+      relMs: Math.round(performance.now() - pttT0) });
     const useNew = RBX.on();
     const res = useNew ? imp : legacy;
     if (res.ok){
       safe(playDing);
       const rescued = useNew && !legacy.ok;
-      rbShow('✓ Read back: “' + res.heard.trim() + '”' + (rescued ? ' · new matcher' + (changes.length ? ' (' + changes.slice(0, 2).map(ch => '“' + ch[0] + '” = ' + ch[1]).join(', ') + ')' : '') : ''), 'ok');
+      rbShow('✓ Read back: “' + res.heard.trim() + '”' + (res.heardAs ? ' (' + res.heardAs + ')' : '') + (rescued ? ' · new matcher' + (changes.length ? ' (' + changes.slice(0, 2).map(ch => '“' + ch[0] + '” = ' + ch[1]).join(', ') + ')' : '') : ''), 'ok');
       warmStop();                       // done with this call — mic off until the next knob tap
     } else {
       safe(playBuzzer);
