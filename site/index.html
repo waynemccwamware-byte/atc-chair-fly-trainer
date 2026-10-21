@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.20</span>
+      <span class="ver mono">v3.21</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -1124,6 +1124,20 @@
     return audioCtx;
   }
   function micOpen(){ return pttDown || collecting; }   // PTT held or release tail still listening
+  // v3.21: every app sound goes through one master gain, so a ding, buzzer or chime that is already
+  // ringing when PTT is keyed can be cut at once. Until v3.20 sounds were only blocked from STARTING
+  // during PTT; one started a moment earlier (the SET chime, right before a Space press) played on into
+  // the mic and Chrome lost the first words of the readback.
+  let appOut = null, hushed = false;
+  function out(ctx){
+    if (!appOut || appOut.context !== ctx){ appOut = ctx.createGain(); appOut.gain.value = hushed ? 0 : 1; appOut.connect(ctx.destination); }
+    return appOut;
+  }
+  function hushAudio(on){
+    hushed = !!on;
+    if (!appOut) return;
+    try { const t = appOut.context.currentTime; appOut.gain.cancelScheduledValues(t); appOut.gain.setTargetAtTime(on ? 0 : 1, t, on ? 0.008 : 0.03); } catch (e) {}
+  }
 
   // v3.12 radio audio: static bed + squelch clicks (Web Audio, no files) — same as Clearance Delivery Trainer
   const RADIO = { bed:null, buf:null, tok:0 };
@@ -1142,7 +1156,7 @@
         const src = ctx.createBufferSource(); src.buffer = RADIO.buf; src.loop = true;
         const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.6;
         RADIO.bed = ctx.createGain(); RADIO.bed.gain.value = 0;
-        src.connect(bp).connect(RADIO.bed).connect(ctx.destination); src.start();
+        src.connect(bp).connect(RADIO.bed).connect(out(ctx)); src.start();
       }
       return ctx;
     } catch (e) { return null; }
@@ -1152,7 +1166,7 @@
     const ctx = audioCtx, t = ctx.currentTime, src = ctx.createBufferSource(); src.buffer = RADIO.buf;
     const g = ctx.createGain(); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5 * level, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
-    src.connect(hp).connect(g).connect(ctx.destination); src.start(t, Math.random()); src.stop(t + 0.16);
+    src.connect(hp).connect(g).connect(out(ctx)); src.start(t, Math.random()); src.stop(t + 0.16);
   }
   function radioOn(){
     const tok = ++RADIO.tok;
@@ -1181,7 +1195,7 @@
     gain.gain.setValueAtTime(0.0001, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(gainPeak, ctx.currentTime + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-    osc.connect(gain).connect(ctx.destination);
+    osc.connect(gain).connect(out(ctx));
     osc.start();
     osc.stop(ctx.currentTime + duration + 0.02);
   }
@@ -1221,7 +1235,7 @@
     envGain.gain.setValueAtTime(0.0001, now);
     envGain.gain.exponentialRampToValueAtTime(gainPeak, now + 0.015);
     envGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    shaper.connect(envGain); envGain.connect(ctx.destination);
+    shaper.connect(envGain); envGain.connect(out(ctx));
   }
   function safe(fn){ try { fn(); } catch (err) { /* feedback only */ } }
 
@@ -2332,6 +2346,7 @@
     return alts.length ? [{ alts, final: first.final }].concat(res.slice(1)) : res.slice(1);
   }
   function warmStop(){
+    if (!pttDown) hushAudio(false);
     wantWarm = false; warmAfterSpeech = false; collecting = false; clearTimeout(tailTimer);
     if (rec){ const r = rec; rec = null; recRunning = false; try { r.abort(); } catch (e) {} }
     archive = []; curResults = [];
@@ -2339,10 +2354,10 @@
   function pttStart(snap, via){
     if (!rbEnable.checked || !SR || pttDown) return;
     pttVia = via || 'mouse';
-    if (!current){ rbShow('Get an instruction first.', 'info'); return; }
-    if (window.speechSynthesis && speechSynthesis.speaking){ rbShow('Wait for ATC to finish…', 'info'); return; }
+    if (!current){ hushAudio(false); rbShow('Get an instruction first.', 'info'); return; }
+    if (window.speechSynthesis && speechSynthesis.speaking){ hushAudio(false); rbShow('Wait for ATC to finish…', 'info'); return; }
     if (collecting){ collecting = false; clearTimeout(tailTimer); }
-    pttDown = true;
+    pttDown = true; hushAudio(true);
     clearTimeout(continuousTimer);   // never move on while the pilot is talking
     rbShow('', '');
     // everything heard before the press (incl. a phrase still in progress: ATC voice / noise) is skipped
@@ -2382,7 +2397,7 @@
     // "whiskey papa" shows up at all, so also wait for RB_QUIET_MS with no new result.
     if (!force && (!settled || performance.now() - lastResAt < RB_QUIET_MS)) return;
     collecting = false; clearTimeout(tailTimer);
-    pttBtn.textContent = 'PTT';
+    pttBtn.textContent = 'PTT'; hushAudio(false);
     finishReadback(res.map(x => x.alts), lastErr);
   }
   function finishReadback(results, err){
@@ -2459,11 +2474,11 @@
   }
   document.addEventListener('keyup', (e) => {
     if (e.code !== 'Space') return;
-    if (spaceHold){ e.preventDefault(); spaceHold = false; pttEnd(); return; }   // always release, wherever focus went
+    if (spaceHold){ e.preventDefault(); spaceHold = false; if (pttDown) pttEnd(); else if (!collecting) hushAudio(false); return; }   // always release, wherever focus went
     if (!rbEnable.checked || !spaceTimer) return;
     e.preventDefault();
     if (spaceTimer){                       // short tap → next instruction
-      clearTimeout(spaceTimer); spaceTimer = null;
+      clearTimeout(spaceTimer); spaceTimer = null; if (!pttDown && !collecting) hushAudio(false);
       if (phase !== 'set') issueNext(false);
       return;
     }
@@ -2492,6 +2507,7 @@
       if (e.repeat || spaceTimer || spaceHold) return;
       // tap = next instruction, hold = PTT; a hold is measured from the key-down so no words are lost
       const snap = Object.assign(pressSnapshot(), { t0: performance.now() });
+      hushAudio(true);   // cut any sound still ringing now, not 250 ms later
       // cold mic: start it now, at the key-down, rather than after the 250 ms tap/hold decision
       if (!recRunning && current && !(window.speechSynthesis && speechSynthesis.speaking)){ warmAfterSpeech = false; warmStart(); }
       spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(snap, 'space'); }, SPACE_HOLD_MS);
