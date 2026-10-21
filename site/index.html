@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.16</span>
+      <span class="ver mono">v3.17</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -2251,7 +2251,7 @@
   const RB_TAIL_MS = 1500, RB_TAIL_MIN_MS = 500;
   let rec = null, recRunning = false, wantWarm = false, rbSession = 0;
   let archive = [], curResults = [];          // results from ended sessions + the live one
-  let pttDown = false, pttStartIdx = 0, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
+  let pttDown = false, pttVia = '', pttStartIdx = 0, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
   const allResults = () => archive.concat(curResults);
   let warmAfterSpeech = false;
   function warmStart(){
@@ -2294,8 +2294,9 @@
     if (rec){ const r = rec; rec = null; recRunning = false; try { r.abort(); } catch (e) {} }
     archive = []; curResults = [];
   }
-  function pttStart(fromIdx){
+  function pttStart(fromIdx, via){
     if (!rbEnable.checked || !SR || pttDown) return;
+    pttVia = via || 'mouse';
     if (!current){ rbShow('Get an instruction first.', 'info'); return; }
     if (window.speechSynthesis && speechSynthesis.speaking){ rbShow('Wait for ATC to finish…', 'info'); return; }
     if (collecting){ collecting = false; clearTimeout(tailTimer); }
@@ -2361,7 +2362,7 @@
     }
     const logId = RBX.log({ app:'atc-chair-fly-trainer', expected: (current.display || '') + ' | ' + callsign, heard: base.trim(), alts: results,
       legacy:{ ok:legacy.ok, missing:legacy.missing }, improved:{ ok:imp.ok, missing:imp.missing, rescued: imp.ok && !legacy.ok ? legacy.missing : [] },
-      changes, readings: cands.length });
+      changes, readings: cands.length, ptt: pttVia });
     const useNew = RBX.on();
     const res = useNew ? imp : legacy;
     if (res.ok){
@@ -2376,15 +2377,38 @@
       // stay warm for another try
     }
   }
-  pttBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); try { pttBtn.setPointerCapture(e.pointerId); } catch (x) {} pttStart(); });
+  pttBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); try { pttBtn.setPointerCapture(e.pointerId); } catch (x) {} pttStart(undefined, e.pointerType === 'touch' ? 'touch' : 'mouse'); });
   pttBtn.addEventListener('pointerup', pttEnd);
   pttBtn.addEventListener('pointercancel', pttEnd);
   pttBtn.addEventListener('contextmenu', (e) => e.preventDefault());
   const SPACE_HOLD_MS = 250;
   let spaceTimer = null, spaceHold = false;
+  // v3.17: Space belongs to the app unless the pilot is typing in a field, or has tabbed onto a control
+  // with the keyboard. A control last clicked with the mouse (a checkbox, a slider, Play sample,
+  // "I said it right"…) keeps focus in Chrome on macOS; before v3.17 that silently swallowed Space-hold PTT.
+  // (:focus-visible can't tell these apart: Chrome turns it on for the focused element at the key press.)
+  let lastPointerAt = 0, mouseFocused = null;
+  document.addEventListener('pointerdown', () => { lastPointerAt = performance.now(); }, true);
+  document.addEventListener('focusin', (e) => { mouseFocused = (performance.now() - lastPointerAt < 600) ? e.target : null; }, true);
+  function spaceTyping(el){
+    if (!el || !el.tagName) return false;
+    if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    return el.tagName === 'INPUT' && !/^(checkbox|radio|range|button|submit|reset|color|file)$/i.test(el.type);
+  }
+  function spaceForApp(el){
+    if (spaceTyping(el)) return false;
+    if (!el || el === document.body || el === btn || el === pttBtn) return true;
+    if (/^(BUTTON|INPUT|SUMMARY|A)$/.test(el.tagName)){
+      if (el !== mouseFocused) return false;   // tabbed onto with the keyboard: let Space work it
+      try { el.blur(); } catch (x) {}  // mouse-left focus: take Space back (also stops the keyup "click")
+    }
+    return true;
+  }
   document.addEventListener('keyup', (e) => {
-    if (e.code !== 'Space' || !rbEnable.checked) return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.code !== 'Space') return;
+    if (spaceHold){ e.preventDefault(); spaceHold = false; pttEnd(); return; }   // always release, wherever focus went
+    if (!rbEnable.checked || !spaceTimer) return;
+    e.preventDefault();
     if (spaceTimer){                       // short tap → next instruction
       clearTimeout(spaceTimer); spaceTimer = null;
       if (phase !== 'set') issueNext(false);
@@ -2408,16 +2432,17 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if (e.code === 'Space' && rbEnable.checked){
-      if (e.target.tagName === 'BUTTON' && e.target !== btn && e.target !== pttBtn) return;
+    if (e.code === 'Space'){
+      if (!spaceForApp(e.target)) return;
       e.preventDefault();
+      if (!rbEnable.checked){ if (!e.repeat && phase !== 'set') issueNext(false); return; }
       if (e.repeat || spaceTimer || spaceHold) return;
       // tap = next instruction, hold = PTT; a hold is measured from the key-down so no words are lost
       const idx = allResults().length;
-      spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(idx); }, SPACE_HOLD_MS);
+      spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(idx, 'space'); }, SPACE_HOLD_MS);
       return;
     }
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if ((phase === 'set' && current.knob === 'com') || kpHold){
       const map = {Backspace:'BKSP', Delete:'BKSP', Enter:'ENT', NumpadEnter:'ENT', Period:'.', NumpadDecimal:'.'};
       const k = /^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : map[e.code];
@@ -2433,7 +2458,7 @@
       return;
     }
     if (e.repeat) return;
-    if (e.code === 'Space' || e.code === 'Enter'){
+    if (e.code === 'Enter'){
       if (e.target.tagName === 'BUTTON' && e.target !== btn) return; // let share button work
       e.preventDefault();
       if (phase === 'set') return; // don't skip away mid-dial by accident
