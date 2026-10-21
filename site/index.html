@@ -503,7 +503,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.17</span>
+      <span class="ver mono">v3.18</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
@@ -2251,7 +2251,7 @@
   const RB_TAIL_MS = 1500, RB_TAIL_MIN_MS = 500;
   let rec = null, recRunning = false, wantWarm = false, rbSession = 0;
   let archive = [], curResults = [];          // results from ended sessions + the live one
-  let pttDown = false, pttVia = '', pttStartIdx = 0, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
+  let pttDown = false, pttVia = '', pttStartIdx = 0, pttPrefix = '', pttWarm = false, pttT0 = 0, pttColdMs = null, tailTimer = null, collecting = false, lastErr = null, gotStart = false;
   const allResults = () => archive.concat(curResults);
   let warmAfterSpeech = false;
   function warmStart(){
@@ -2264,7 +2264,7 @@
     try { r = new SR(); } catch (e) { return; }
     rec = r; recRunning = true; gotStart = false; lastErr = null;
     r.lang = 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 5;
-    r.onstart = () => { gotStart = true; if (pttDown) pttBtn.textContent = '● TX'; };
+    r.onstart = () => { gotStart = true; if ((pttDown || collecting) && !pttWarm && pttColdMs === null) pttColdMs = Math.round(performance.now() - pttT0); if (pttDown) pttBtn.textContent = '● TX'; };
     r.onresult = (ev) => {
       if (rec !== r) return;
       curResults = Array.from(ev.results).map(x => ({alts: Array.from(x).map(a => a.transcript), final: x.isFinal}));
@@ -2287,14 +2287,35 @@
     try { r.start(); } catch (e) { recRunning = false; }
   }
   function onAtcDone(){   // called when the instruction finishes speaking
-    if (warmAfterSpeech){ warmAfterSpeech = false; if (wantWarm) setTimeout(warmStart, 150); }
+    if (warmAfterSpeech){ warmAfterSpeech = false; if (wantWarm) setTimeout(warmStart, 150); return; }
+    // v3.18: with READ BACK on, open the mic as soon as ATC finishes, not only after a knob tap. A pilot who
+    // reads back before reaching for the knob otherwise keys a cold recognizer and loses ~0.5-1 s of the
+    // front end ("left 30 degrees, 1WP" heard as "One Whiskey Papa"). Not on iPhone/iPad, where an open mic
+    // changes the audio session and blocks the next instruction's speech; there the knob tap still warms it.
+    if (rbEnable.checked && SR && !IS_IOS && current && !recRunning)
+      setTimeout(() => { if (rbEnable.checked && current && !recRunning && !(window.speechSynthesis && speechSynthesis.speaking)) warmStart(); }, 150);
+  }
+  // What the recognizer already has at the moment PTT is pressed. A phrase still open then (noise, a chime,
+  // static) is not dropped whole any more: the pilot's first words can land in that same result, so only the
+  // text heard before the press is stripped from it.
+  function pressSnapshot(){
+    const all = allResults(), last = all[all.length - 1];
+    const warm = recRunning && gotStart;
+    if (last && !last.final) return { idx: all.length - 1, prefix: (last.alts[0] || '').trim().toLowerCase(), warm };
+    return { idx: all.length, prefix: '', warm };
+  }
+  function stripPressPrefix(res){
+    if (!res.length || !pttPrefix) return res;
+    const p = pttPrefix, first = res[0];
+    const alts = first.alts.map(a => { const t = (a || '').trim(); return t.toLowerCase().startsWith(p) ? t.slice(p.length).trim() : t; }).filter(Boolean);
+    return alts.length ? [{ alts, final: first.final }].concat(res.slice(1)) : res.slice(1);
   }
   function warmStop(){
     wantWarm = false; warmAfterSpeech = false; collecting = false; clearTimeout(tailTimer);
     if (rec){ const r = rec; rec = null; recRunning = false; try { r.abort(); } catch (e) {} }
     archive = []; curResults = [];
   }
-  function pttStart(fromIdx, via){
+  function pttStart(snap, via){
     if (!rbEnable.checked || !SR || pttDown) return;
     pttVia = via || 'mouse';
     if (!current){ rbShow('Get an instruction first.', 'info'); return; }
@@ -2304,7 +2325,9 @@
     clearTimeout(continuousTimer);   // never move on while the pilot is talking
     rbShow('', '');
     // everything heard before the press (incl. a phrase still in progress: ATC voice / noise) is skipped
-    pttStartIdx = (typeof fromIdx === 'number') ? Math.min(fromIdx, allResults().length) : allResults().length;
+    const sn = snap || pressSnapshot();
+    pttStartIdx = Math.min(sn.idx, allResults().length); pttPrefix = sn.prefix;
+    pttWarm = sn.warm; pttT0 = sn.t0 || performance.now(); pttColdMs = null;
     pttBtn.classList.add('tx');
     pttBtn.textContent = (recRunning && gotStart) ? '● TX' : '● …';
     if (!recRunning){ warmAfterSpeech = false; warmStart(); }
@@ -2329,7 +2352,7 @@
   }
   function maybeFinish(force){
     if (!collecting) return;
-    const res = allResults().slice(pttStartIdx);
+    const res = stripPressPrefix(allResults().slice(pttStartIdx));
     const settled = res.length > 0 && res.every(x => x.final);
     if (!force && !settled) return;
     collecting = false; clearTimeout(tailTimer);
@@ -2362,7 +2385,7 @@
     }
     const logId = RBX.log({ app:'atc-chair-fly-trainer', expected: (current.display || '') + ' | ' + callsign, heard: base.trim(), alts: results,
       legacy:{ ok:legacy.ok, missing:legacy.missing }, improved:{ ok:imp.ok, missing:imp.missing, rescued: imp.ok && !legacy.ok ? legacy.missing : [] },
-      changes, readings: cands.length, ptt: pttVia });
+      changes, readings: cands.length, ptt: pttVia, mic: pttWarm ? 'warm' : 'cold', coldMs: pttWarm ? undefined : pttColdMs, pre: pttPrefix || undefined });
     const useNew = RBX.on();
     const res = useNew ? imp : legacy;
     if (res.ok){
@@ -2438,8 +2461,10 @@
       if (!rbEnable.checked){ if (!e.repeat && phase !== 'set') issueNext(false); return; }
       if (e.repeat || spaceTimer || spaceHold) return;
       // tap = next instruction, hold = PTT; a hold is measured from the key-down so no words are lost
-      const idx = allResults().length;
-      spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(idx, 'space'); }, SPACE_HOLD_MS);
+      const snap = Object.assign(pressSnapshot(), { t0: performance.now() });
+      // cold mic: start it now, at the key-down, rather than after the 250 ms tap/hold decision
+      if (!recRunning && current && !(window.speechSynthesis && speechSynthesis.speaking)){ warmAfterSpeech = false; warmStart(); }
+      spaceTimer = setTimeout(() => { spaceTimer = null; spaceHold = true; pttStart(snap, 'space'); }, SPACE_HOLD_MS);
       return;
     }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
