@@ -42,7 +42,7 @@
     background:radial-gradient(ellipse at 50% 0%, #171d26 0%, var(--bg-deep) 60%);
     font-family:'IBM Plex Sans', sans-serif;
     color:var(--text-primary);
-    padding:24px;
+    padding:12px 24px 24px;   /* v3.23 (25-Nov-2026): was 24px on top (Wayne: less air above the title, all apps) */
     overscroll-behavior:none;
   }
   .layout{
@@ -497,6 +497,12 @@
       else { var x = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || '')); if (!x) return String(d || ''); y = +x[1]; m = +x[2] - 1; dd = +x[3]; }
       return (dd < 10 ? '0' : '') + dd + '-' + MON[lang][m] + '-' + y;
     },
+    // any 25-Nov-2026 in a string, in the current language (25-nov-2026)
+    dmy: function (str) {
+      if (!es) return String(str == null ? '' : str);
+      return String(str == null ? '' : str).replace(/\b(\d{1,2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{4})\b/g,
+        function (m, d, mo, y) { return d + '-' + MON.es[MON.en.indexOf(mo)] + '-' + y; });
+    },
     withLang: withLang,
     // Elements marked data-es="…" (innerHTML) or data-es-title, data-es-placeholder, … get their Spanish once.
     apply: function (root) {
@@ -615,7 +621,7 @@
 <div class="layout">
     <div class="title-row">
       <h1>ATC Chair-Fly Trainer</h1>
-      <span class="ver mono">v3.22</span>
+      <span class="ver mono">v3.23</span>
     </div>
 
     <svg class="lsrb-graphic" viewBox="0 0 340 100" role="img" aria-label="Diagram: scrambled words Listen, Write, Read Back, Set above the correct sequence Listen, Set, Read Back">
